@@ -1,0 +1,15 @@
+[package]
+name = "rboot"
+version = "0.1.0"
+authors = ["WangRunji <wangrunji0408@163.com>"]
+edition = "2018"
+description = "The x86_64 UEFI bootloader for rCore"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+uefi = { git = "https://github.com/rust-osdev/uefi-rs.git", rev = "3b80c89a" }
+uefi-services = { git = "https://github.com/rust-osdev/uefi-rs.git", rev = "3b80c89a" }
+log = "0.4"
+xmas-elf = "0.7"
+x86_64 = "0.7"

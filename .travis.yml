@@ -1,0 +1,18 @@
+sudo: false
+
+dist: xenial
+
+language: rust
+
+rust: nightly
+
+os:
+  - linux
+  - osx
+
+before_script:
+  - rustup component add rust-src
+  - "(test -x $HOME/.cargo/bin/cargo-xbuild || cargo install cargo-xbuild)"
+
+script:
+  - make build
