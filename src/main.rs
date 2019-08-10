@@ -16,6 +16,7 @@ extern crate alloc;
 extern crate log;
 
 use uefi::prelude::*;
+use uefi::proto::console::gop::{GraphicsOutput, ModeInfo};
 use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::pi::mp::MPServices;
@@ -42,12 +43,19 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
         let buf = load_file(bs, &mut file);
         config::Config::parse(buf)
     };
+
+    let graphic_mode = init_graphic(bs, config.resolution);
     info!("config: {:#x?}", config);
+
     let elf = {
         let mut file = open_file(bs, config.kernel_path);
         let buf = load_file(bs, &mut file);
         ElfFile::new(buf).expect("failed to parse ELF")
     };
+    unsafe {
+        ENTRY = elf.header.pt2.entry_point() as usize;
+    }
+
     let mut page_table = current_page_table();
     // root page table is readonly
     // disable write protect
@@ -57,13 +65,13 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator(bs))
         .expect("failed to map ELF");
     // we use UEFI default stack, no need to allocate
-//    page_table::map_stack(
-//        config.kernel_stack_address,
-//        config.kernel_stack_size,
-//        &mut page_table,
-//        &mut UEFIFrameAllocator(bs),
-//    )
-//    .expect("failed to map stack");
+    //    page_table::map_stack(
+    //        config.kernel_stack_address,
+    //        config.kernel_stack_size,
+    //        &mut page_table,
+    //        &mut UEFIFrameAllocator(bs),
+    //    )
+    //    .expect("failed to map stack");
     page_table::map_physical_memory(
         config.physical_memory_offset,
         0x100000000,
@@ -78,16 +86,16 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     start_aps(bs);
 
     info!("exit boot services");
-    let max_mmap_size =
-        st.boot_services().memory_map_size() + 8 * core::mem::size_of::<MemoryDescriptor>();
-    let mut mmap_storage = vec![0; max_mmap_size].into_boxed_slice();
+    let max_mmap_size = st.boot_services().memory_map_size();
+    let mut mmap_storage = vec![0; max_mmap_size];
 
     let (_rt, _) = st
-        .exit_boot_services(image, &mut mmap_storage[..])
+        .exit_boot_services(image, &mut mmap_storage)
         .expect_success("Failed to exit boot services");
     // NOTE: log can no longer be used
 
-    call_elf_entry(&elf);
+    let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
+    entry();
 }
 
 /// Open file at `path`
@@ -126,6 +134,32 @@ fn load_file(bs: &BootServices, file: &mut RegularFile) -> &'static mut [u8] {
     &mut buf[..len]
 }
 
+/// If `resolution` is some, then set graphic mode matching the resolution.
+/// Return information of the final graphic mode.
+fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> ModeInfo {
+    let gop = bs
+        .locate_protocol::<GraphicsOutput>()
+        .expect_success("failed to get GraphicsOutput");
+    let gop = unsafe { &mut *gop.get() };
+
+    if let Some(resolution) = resolution {
+        let mode = gop
+            .modes()
+            .map(|mode| mode.expect("Warnings encountered while querying mode"))
+            .find(|ref mode| {
+                let info = mode.info();
+                info.resolution() == resolution
+            })
+            .expect("graphic mode not found");
+        info!("switching graphic mode");
+        gop.set_mode(&mode)
+            .expect_success("Failed to set graphics mode");
+        *mode.info()
+    } else {
+        gop.current_mode_info()
+    }
+}
+
 /// Get current page table from CR3
 fn current_page_table() -> OffsetPageTable<'static> {
     let p4_table_addr = Cr3::read().0.start_address().as_u64();
@@ -162,15 +196,10 @@ fn start_aps(bs: &BootServices) {
 
 /// Main function for application processors
 extern "win64" fn ap_main(_arg: *mut core::ffi::c_void) {
-    x86_64::instructions::hlt();
-    // TODO: call elf entry
-}
-
-/// Jump to ELF entry
-fn call_elf_entry(elf: &ElfFile) -> ! {
-    info!("jumping to ELF entry");
-    type KernelEntry = extern "C" fn() -> !;
-    let entry_addr = elf.header.pt2.entry_point();
-    let entry: KernelEntry = unsafe { core::mem::transmute(entry_addr) };
+    let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
     entry();
 }
+
+type KernelEntry = extern "C" fn() -> !;
+/// The entry point of kernel, set by BSP.
+static mut ENTRY: usize = 0;
