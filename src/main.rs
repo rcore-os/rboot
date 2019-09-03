@@ -9,14 +9,17 @@
 
 #![no_std]
 #![no_main]
+#![feature(asm)]
 
 #[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate log;
 
+use alloc::boxed::Box;
+use rboot::{BootInfo, GraphicInfo, MemoryMap};
 use uefi::prelude::*;
-use uefi::proto::console::gop::{GraphicsOutput, ModeInfo};
+use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::pi::mp::MPServices;
@@ -44,7 +47,7 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
         config::Config::parse(buf)
     };
 
-    let graphic_mode = init_graphic(bs, config.resolution);
+    let graphic_info = init_graphic(bs, config.resolution);
     info!("config: {:#x?}", config);
 
     let elf = {
@@ -54,7 +57,20 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     };
     unsafe {
         ENTRY = elf.header.pt2.entry_point() as usize;
+        PHYSICAL_MEMORY_OFFSET = config.physical_memory_offset;
     }
+
+    let max_mmap_size = st.boot_services().memory_map_size();
+    let mut mmap_storage = Box::leak(vec![0; max_mmap_size].into_boxed_slice());
+    let mmap_iter = st
+        .boot_services()
+        .memory_map(mmap_storage)
+        .expect_success("failed to get memory map")
+        .1;
+    let max_phys_addr = mmap_iter
+        .map(|m| m.phys_start + m.page_count * 0x1000)
+        .max()
+        .unwrap();
 
     let mut page_table = current_page_table();
     // root page table is readonly
@@ -74,7 +90,7 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     //    .expect("failed to map stack");
     page_table::map_physical_memory(
         config.physical_memory_offset,
-        0x100000000,
+        max_phys_addr,
         &mut page_table,
         &mut UEFIFrameAllocator(bs),
     );
@@ -86,16 +102,20 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     start_aps(bs);
 
     info!("exit boot services");
-    let max_mmap_size = st.boot_services().memory_map_size();
-    let mut mmap_storage = vec![0; max_mmap_size];
 
-    let (_rt, _) = st
-        .exit_boot_services(image, &mut mmap_storage)
+    let (_rt, mmap_iter) = st
+        .exit_boot_services(image, mmap_storage)
         .expect_success("Failed to exit boot services");
-    // NOTE: log can no longer be used
+    // NOTE: alloc & log can no longer be used
 
-    let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
-    entry();
+    // construct BootInfo
+    let bootinfo = BootInfo {
+        memory_map: MemoryMap { iter: mmap_iter },
+        physical_memory_offset: config.physical_memory_offset,
+        graphic_info,
+    };
+
+    jump_to_entry(&bootinfo);
 }
 
 /// Open file at `path`
@@ -136,7 +156,7 @@ fn load_file(bs: &BootServices, file: &mut RegularFile) -> &'static mut [u8] {
 
 /// If `resolution` is some, then set graphic mode matching the resolution.
 /// Return information of the final graphic mode.
-fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> ModeInfo {
+fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> GraphicInfo {
     let gop = bs
         .locate_protocol::<GraphicsOutput>()
         .expect_success("failed to get GraphicsOutput");
@@ -154,9 +174,11 @@ fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> ModeIn
         info!("switching graphic mode");
         gop.set_mode(&mode)
             .expect_success("Failed to set graphics mode");
-        *mode.info()
-    } else {
-        gop.current_mode_info()
+    }
+    GraphicInfo {
+        mode: gop.current_mode_info(),
+        fb_addr: gop.frame_buffer().as_mut_ptr() as u64,
+        fb_size: gop.frame_buffer().size() as u64,
     }
 }
 
@@ -196,10 +218,27 @@ fn start_aps(bs: &BootServices) {
 
 /// Main function for application processors
 extern "win64" fn ap_main(_arg: *mut core::ffi::c_void) {
-    let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
-    entry();
+    jump_to_entry(core::ptr::null());
 }
 
-type KernelEntry = extern "C" fn() -> !;
+/// Jump to ELF entry according to global variable `ENTRY`
+fn jump_to_entry(bootinfo: *const BootInfo) -> ! {
+    // HACK: why this way causes wrong argument?
+    //
+    // let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
+    // entry(bootinfo);
+    unsafe {
+        // TODO: Setup stack pointer safely
+        //       Now rsp is pointing to physical mapping area without guard page.
+        asm!("add rsp, $0; jmp $1"
+            :: "m"(PHYSICAL_MEMORY_OFFSET), "r"(ENTRY), "{rdi}"(bootinfo)
+            :: "intel");
+    }
+    unreachable!()
+}
+
+type KernelEntry = extern "C" fn(*const BootInfo) -> !;
 /// The entry point of kernel, set by BSP.
 static mut ENTRY: usize = 0;
+/// Physical memory offset, set by BSP.
+static mut PHYSICAL_MEMORY_OFFSET: u64 = 0;
