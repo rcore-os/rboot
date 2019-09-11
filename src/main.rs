@@ -61,7 +61,7 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     }
 
     let max_mmap_size = st.boot_services().memory_map_size();
-    let mut mmap_storage = Box::leak(vec![0; max_mmap_size].into_boxed_slice());
+    let mmap_storage = Box::leak(vec![0; max_mmap_size].into_boxed_slice());
     let mmap_iter = st
         .boot_services()
         .memory_map(mmap_storage)
@@ -242,3 +242,9 @@ type KernelEntry = extern "C" fn(*const BootInfo) -> !;
 static mut ENTRY: usize = 0;
 /// Physical memory offset, set by BSP.
 static mut PHYSICAL_MEMORY_OFFSET: u64 = 0;
+
+/// Workaround for Rust compiler bug:
+/// https://github.com/rust-lang/rust/issues/62785
+#[used]
+#[no_mangle]
+pub static _fltused: i32 = 0;

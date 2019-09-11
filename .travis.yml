@@ -4,7 +4,7 @@ dist: xenial
 
 language: rust
 
-rust: nightly
+rust: nightly-2019-09-01
 
 os:
   - linux
