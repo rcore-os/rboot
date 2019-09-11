@@ -58,7 +58,7 @@ fn map_segment(
             debug!("mapping segment: {:#x?}", segment);
             let mem_size = segment.mem_size();
             let file_size = segment.file_size();
-            let file_offset = segment.offset();
+            let file_offset = segment.offset() & !0xfff;
             let phys_start_addr = kernel_start + file_offset;
             let virt_start_addr = VirtAddr::new(segment.virtual_addr());
 
@@ -135,16 +135,16 @@ fn map_segment(
                     let frame = frame_allocator
                         .allocate_frame()
                         .ok_or(MapToError::FrameAllocationFailed)?;
-                    // zero
-                    for offset in 0..0x1000 {
-                        let addr = frame.start_address().as_u64() + offset;
-                        unsafe { (addr as *mut u8).write(0) };
-                    }
                     unsafe {
                         page_table
                             .map_to(page, frame, page_table_flags, frame_allocator)?
                             .flush();
                     }
+                }
+
+                // zero bss
+                unsafe {
+                    core::ptr::write_bytes(zero_start.as_mut_ptr::<u8>(), 0, (mem_size - file_size) as usize);
                 }
             }
         }

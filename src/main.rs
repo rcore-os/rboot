@@ -24,7 +24,7 @@ use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::pi::mp::MPServices;
 use uefi::table::boot::*;
-use x86_64::registers::control::{Cr0, Cr0Flags, Cr3};
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Efer, EferFlags};
 use x86_64::structures::paging::{FrameAllocator, OffsetPageTable, PageTable, PhysFrame, Size4KiB};
 use x86_64::{PhysAddr, VirtAddr};
 use xmas_elf::ElfFile;
@@ -70,13 +70,15 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
     let max_phys_addr = mmap_iter
         .map(|m| m.phys_start + m.page_count * 0x1000)
         .max()
-        .unwrap();
+        .unwrap()
+        .max(0x100000000); // include IOAPIC MMIO area
 
     let mut page_table = current_page_table();
     // root page table is readonly
     // disable write protect
     unsafe {
         Cr0::update(|f| f.remove(Cr0Flags::WRITE_PROTECT));
+        Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
     }
     page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator(bs))
         .expect("failed to map ELF");
