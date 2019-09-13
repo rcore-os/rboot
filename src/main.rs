@@ -24,6 +24,7 @@ use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::pi::mp::MPServices;
 use uefi::table::boot::*;
+use uefi::table::cfg::ACPI2_GUID;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Efer, EferFlags};
 use x86_64::structures::paging::{FrameAllocator, OffsetPageTable, PageTable, PhysFrame, Size4KiB};
 use x86_64::{PhysAddr, VirtAddr};
@@ -49,6 +50,14 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
 
     let graphic_info = init_graphic(bs, config.resolution);
     info!("config: {:#x?}", config);
+
+    let acpi2_addr = st
+        .config_table()
+        .iter()
+        .find(|entry| entry.guid == ACPI2_GUID)
+        .expect("failed to find ACPI 2 RSDP")
+        .address;
+    info!("acpi2: {:?}", acpi2_addr);
 
     let elf = {
         let mut file = open_file(bs, config.kernel_path);
@@ -115,6 +124,7 @@ pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status
         memory_map: MemoryMap { iter: mmap_iter },
         physical_memory_offset: config.physical_memory_offset,
         graphic_info,
+        acpi2_rsdp_addr: acpi2_addr as u64,
     };
 
     jump_to_entry(&bootinfo);

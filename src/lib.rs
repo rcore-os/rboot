@@ -13,6 +13,8 @@ pub struct BootInfo {
     pub physical_memory_offset: u64,
     /// The graphic output information
     pub graphic_info: GraphicInfo,
+    /// Physical address of ACPI2 RSDP
+    pub acpi2_rsdp_addr: u64,
 }
 
 pub struct MemoryMap {
