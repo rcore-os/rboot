@@ -220,12 +220,41 @@ fn start_aps(bs: &BootServices) {
     let mp = bs
         .locate_protocol::<MPServices>()
         .expect_success("failed to get MPServices");
-    let mp = unsafe { &mut *mp.get() };
+    let mp = unsafe { mp.get() };
 
-    // `ap_main` will never return, add timeout to be non-block
-    let timeout = core::time::Duration::from_secs(1);
-    mp.startup_all_aps(false, ap_main, core::ptr::null_mut(), Some(timeout))
-        .expect_error("failed to startup all application processors");
+    // this event will never be signaled
+    let event = unsafe {
+        bs.create_event(EventType::empty(), Tpl::APPLICATION, None)
+            .expect_success("failed to create event")
+    };
+
+    // workaround as uefi crate do not implement non-blocking call
+    use core::ffi::c_void;
+    use uefi::proto::pi::mp::Procedure;
+    type StartupAllAps = extern "win64" fn(
+        this: *const MPServices,
+        procedure: Procedure,
+        single_thread: bool,
+        wait_event: *mut c_void,
+        timeout_in_micro_seconds: usize,
+        procedure_argument: *mut c_void,
+        failed_cpu_list: *mut *mut usize,
+    ) -> Status;
+    let startup_all_aps = unsafe { *((mp as *const usize).add(2) as *const StartupAllAps) };
+    let event_ptr = unsafe { core::mem::transmute(event) };
+    let status = startup_all_aps(
+        mp,
+        ap_main,
+        false,
+        event_ptr,
+        0,
+        core::ptr::null_mut(),
+        core::ptr::null_mut(),
+    );
+    assert!(
+        status.is_success(),
+        "failed to startup all application processors"
+    );
 }
 
 /// Main function for application processors
