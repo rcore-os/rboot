@@ -251,10 +251,12 @@ fn start_aps(bs: &BootServices) {
         core::ptr::null_mut(),
         core::ptr::null_mut(),
     );
-    assert!(
-        status.is_success(),
-        "failed to startup all application processors"
-    );
+    if !status.is_success() {
+        warn!(
+            "failed to startup all application processors with {:?}",
+            status
+        );
+    }
 }
 
 /// Main function for application processors
