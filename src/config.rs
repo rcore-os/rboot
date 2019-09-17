@@ -13,6 +13,8 @@ pub struct Config<'a> {
     pub kernel_path: &'a str,
     /// The resolution of graphic output
     pub resolution: Option<(usize, usize)>,
+    /// The path of initramfs
+    pub initramfs: Option<&'a str>,
 }
 
 const DEFAULT_CONFIG: Config = Config {
@@ -21,6 +23,7 @@ const DEFAULT_CONFIG: Config = Config {
     physical_memory_offset: 0xFFFF800000000000,
     kernel_path: "\\EFI\\rCore\\kernel.elf",
     resolution: None,
+    initramfs: None,
 };
 
 impl<'a> Config<'a> {
@@ -56,6 +59,7 @@ impl<'a> Config<'a> {
                 let y = iter.next().unwrap().parse::<usize>().unwrap();
                 self.resolution = Some((x, y));
             }
+            "initramfs" => self.initramfs = Some(value),
             _ => warn!("undefined config key: {}", key),
         }
     }

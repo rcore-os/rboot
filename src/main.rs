@@ -70,6 +70,14 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         PHYSICAL_MEMORY_OFFSET = config.physical_memory_offset;
     }
 
+    let (initramfs_addr, initramfs_size) = if let Some(path) = config.initramfs {
+        let mut file = open_file(bs, path);
+        let buf = load_file(bs, &mut file);
+        (buf.as_ptr() as u64, buf.len() as u64)
+    } else {
+        (0, 0)
+    };
+
     let max_mmap_size = st.boot_services().memory_map_size();
     let mmap_storage = Box::leak(vec![0; max_mmap_size].into_boxed_slice());
     let mmap_iter = st
@@ -126,6 +134,8 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         physical_memory_offset: config.physical_memory_offset,
         graphic_info,
         acpi2_rsdp_addr: acpi2_addr as u64,
+        initramfs_addr,
+        initramfs_size,
     };
 
     jump_to_entry(&bootinfo);
