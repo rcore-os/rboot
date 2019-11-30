@@ -9,7 +9,7 @@
 
 #![no_std]
 #![no_main]
-#![feature(asm)]
+#![feature(asm, abi_efiapi)]
 
 #[macro_use]
 extern crate alloc;
@@ -35,8 +35,8 @@ mod page_table;
 
 const CONFIG_PATH: &str = "\\EFI\\Boot\\rboot.conf";
 
-#[no_mangle]
-pub extern "C" fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
+#[entry]
+fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
     // Initialize utilities (logging, memory allocation...)
     uefi_services::init(&st).expect_success("failed to initialize utilities");
 
@@ -220,7 +220,7 @@ fn start_aps(bs: &BootServices) {
     let mp = bs
         .locate_protocol::<MPServices>()
         .expect_success("failed to get MPServices");
-    let mp = unsafe { mp.get() };
+    let mp = mp.get();
 
     // this event will never be signaled
     let event = unsafe {
@@ -231,7 +231,7 @@ fn start_aps(bs: &BootServices) {
     // workaround as uefi crate do not implement non-blocking call
     use core::ffi::c_void;
     use uefi::proto::pi::mp::Procedure;
-    type StartupAllAps = extern "win64" fn(
+    type StartupAllAps = extern "efiapi" fn(
         this: *const MPServices,
         procedure: Procedure,
         single_thread: bool,
@@ -260,7 +260,7 @@ fn start_aps(bs: &BootServices) {
 }
 
 /// Main function for application processors
-extern "win64" fn ap_main(_arg: *mut core::ffi::c_void) {
+extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
     jump_to_entry(core::ptr::null());
 }
 
@@ -285,9 +285,3 @@ type KernelEntry = extern "C" fn(*const BootInfo) -> !;
 static mut ENTRY: usize = 0;
 /// Physical memory offset, set by BSP.
 static mut PHYSICAL_MEMORY_OFFSET: u64 = 0;
-
-/// Workaround for Rust compiler bug:
-/// https://github.com/rust-lang/rust/issues/62785
-#[used]
-#[no_mangle]
-pub static _fltused: i32 = 0;

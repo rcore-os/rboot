@@ -1,8 +1,8 @@
 #![no_std]
 
-pub use uefi::proto::console::gop::ModeInfo;
-pub use uefi::table::boot::{MemoryMapIter, MemoryDescriptor, MemoryType, MemoryAttribute};
 use core::fmt;
+pub use uefi::proto::console::gop::ModeInfo;
+pub use uefi::table::boot::{MemoryAttribute, MemoryDescriptor, MemoryMapIter, MemoryType};
 
 /// This structure represents the information that the bootloader passes to the kernel.
 #[repr(C)]
