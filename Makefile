@@ -1,11 +1,21 @@
+ARCH ?= x86_64
 MODE ?= release
-EFI := target/x86_64-unknown-uefi/$(MODE)/rboot.efi
-OVMF := OVMF.fd
+TARGET := $(ARCH)-unknown-uefi
+EFI := target/$(TARGET)/$(MODE)/rboot.efi
+OVMF := ovmf/$(ARCH).fd
 ESP := esp
-BUILD_ARGS := -Z build-std=core,alloc --target x86_64-unknown-uefi
 QEMU_ARGS := -net none -smp cores=4 -nographic
 #	-debugcon file:debug.log -global isa-debugcon.iobase=0x402
 
+ifeq (${ARCH}, x86_64)
+	BOOTEFI := BOOTX64.efi
+else ifeq (${ARCH}, aarch64)
+	BOOTEFI := BOOTAA64.efi
+	TARGET := ${TARGET}.json
+	QEMU_ARGS += -M virt -cpu cortex-a57
+endif
+
+BUILD_ARGS := -Z build-std=core,alloc --target $(TARGET)
 
 ifeq (${MODE}, release)
 	BUILD_ARGS += --release
@@ -31,9 +41,9 @@ uefi-run: build
 
 run: build
 	mkdir -p $(ESP)/EFI/Boot
-	cp $(EFI) $(ESP)/EFI/Boot/BootX64.efi
+	cp $(EFI) $(ESP)/EFI/Boot/${BOOTEFI}
 	cp rboot.conf $(ESP)/EFI/Boot
-	qemu-system-x86_64 \
+	qemu-system-${ARCH} \
 		-bios ${OVMF} \
 		-drive format=raw,file=fat:rw:${ESP} \
 		$(QEMU_ARGS)
