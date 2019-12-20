@@ -4,7 +4,7 @@ TARGET := $(ARCH)-unknown-uefi
 EFI := target/$(TARGET)/$(MODE)/rboot.efi
 OVMF := ovmf/$(ARCH).fd
 ESP := esp
-QEMU_ARGS := -net none -smp cores=4 -nographic
+QEMU_ARGS := -m 512 -net none -smp cores=4 -nographic
 #	-debugcon file:debug.log -global isa-debugcon.iobase=0x402
 
 ifeq (${ARCH}, x86_64)

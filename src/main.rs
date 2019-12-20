@@ -18,28 +18,28 @@ extern crate log;
 extern crate rlibc;
 
 #[cfg(target_arch = "aarch64")]
-use aarch64::paging::{FrameAllocator, PhysFrame, Size4KiB};
-#[cfg(target_arch = "aarch64")]
-use aarch64::PhysAddr;
+use aarch64::{
+    paging::{FrameAllocator, PhysFrame, Size4KiB},
+    PhysAddr,
+};
 use alloc::boxed::Box;
 use rboot::{BootInfo, GraphicInfo, MemoryMap};
-use uefi::prelude::*;
-use uefi::proto::console::gop::GraphicsOutput;
-use uefi::proto::media::file::*;
-use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::proto::pi::mp::MPServices;
-use uefi::table::boot::*;
-use uefi::table::cfg::{ACPI2_GUID, SMBIOS_GUID};
+use uefi::{
+    prelude::*,
+    proto::{
+        console::gop::GraphicsOutput, media::file::*, media::fs::SimpleFileSystem,
+        pi::mp::MPServices,
+    },
+    table::{
+        boot::*,
+        cfg::{ACPI2_GUID, SMBIOS_GUID},
+    },
+};
 #[cfg(target_arch = "x86_64")]
-use x86_64::registers::control::*;
-#[cfg(target_arch = "x86_64")]
-use x86_64::structures::paging::*;
-#[cfg(target_arch = "x86_64")]
-use x86_64::{PhysAddr, VirtAddr};
+use x86_64::{registers::control::*, structures::paging::*, PhysAddr};
 use xmas_elf::ElfFile;
 
 mod config;
-#[cfg(target_arch = "x86_64")]
 mod page_table;
 
 const CONFIG_PATH: &str = "\\EFI\\Boot\\rboot.conf";
@@ -106,8 +106,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         .unwrap()
         .max(0x1_0000_0000); // include IOAPIC MMIO area
 
-    #[cfg(target_arch = "x86_64")]
-    let mut page_table = current_page_table();
+    let mut page_table = page_table::current_page_table();
     // root page table is readonly
     // disable write protect
     #[cfg(target_arch = "x86_64")]
@@ -115,7 +114,6 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         Cr0::update(|f| f.remove(Cr0Flags::WRITE_PROTECT));
         Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
     }
-    #[cfg(target_arch = "x86_64")]
     page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator(bs))
         .expect("failed to map ELF");
     page_table::map_stack(
@@ -125,7 +123,6 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         &mut UEFIFrameAllocator(bs),
     )
     .expect("failed to map stack");
-    #[cfg(target_arch = "x86_64")]
     page_table::map_physical_memory(
         config.physical_memory_offset,
         max_phys_addr,
@@ -205,11 +202,11 @@ fn load_file(bs: &BootServices, file: &mut RegularFile) -> &'static mut [u8] {
 
 /// If `resolution` is some, then set graphic mode matching the resolution.
 /// Return information of the final graphic mode.
-fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> GraphicInfo {
-    let gop = bs
-        .locate_protocol::<GraphicsOutput>()
-        .expect_success("failed to get GraphicsOutput");
-    let gop = unsafe { &mut *gop.get() };
+fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> Option<GraphicInfo> {
+    let gop = match bs.locate_protocol::<GraphicsOutput>().warning_as_error() {
+        Ok(gop) => unsafe { &mut *gop.get() },
+        Err(_) => return None,
+    };
 
     if let Some(resolution) = resolution {
         let mode = gop
@@ -224,19 +221,11 @@ fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> Graphi
         gop.set_mode(&mode)
             .expect_success("Failed to set graphics mode");
     }
-    GraphicInfo {
+    Some(GraphicInfo {
         mode: gop.current_mode_info(),
         fb_addr: gop.frame_buffer().as_mut_ptr() as u64,
         fb_size: gop.frame_buffer().size() as u64,
-    }
-}
-
-/// Get current page table from CR3
-#[cfg(target_arch = "x86_64")]
-fn current_page_table() -> OffsetPageTable<'static> {
-    let p4_table_addr = Cr3::read().0.start_address().as_u64();
-    let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
-    unsafe { OffsetPageTable::new(p4_table, VirtAddr::new(0)) }
+    })
 }
 
 /// Use `BootServices::allocate_pages()` as frame allocator
@@ -313,6 +302,7 @@ fn start_aps(bs: &BootServices) {
 }
 
 /// Main function for application processors
+#[allow(dead_code)]
 extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
     unsafe {
         jump_to_entry(core::ptr::null(), 0);
@@ -321,7 +311,10 @@ extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
 
 /// Jump to ELF entry according to global variable `ENTRY`
 unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
+    #[cfg(target_arch = "x86_64")]
     llvm_asm!("call $0" :: "r"(ENTRY), "{rsp}"(stacktop), "{rdi}"(bootinfo) :: "intel");
+    #[cfg(target_arch = "aarch64")]
+    llvm_asm!("blr $0" :: "r"(ENTRY), "{sp}"(stacktop), "{x0}"(bootinfo));
     loop {}
 }
 
