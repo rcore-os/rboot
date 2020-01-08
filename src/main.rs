@@ -285,3 +285,6 @@ type KernelEntry = extern "C" fn(*const BootInfo) -> !;
 static mut ENTRY: usize = 0;
 /// Physical memory offset, set by BSP.
 static mut PHYSICAL_MEMORY_OFFSET: u64 = 0;
+
+#[no_mangle]
+pub static __rust_probestack: i32 = 0;
