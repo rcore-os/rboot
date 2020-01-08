@@ -11,10 +11,13 @@ ifeq (${MODE}, release)
 	BUILD_ARGS += --release
 endif
 
-.PHONY: build run header asm
+.PHONY: build run header asm doc
 
 build:
 	cargo build $(BUILD_ARGS)
+
+doc:
+	cargo doc
 
 uefi-run: build
 	uefi-run \
@@ -33,7 +36,7 @@ run: build
 		$(QEMU_ARGS)
 
 header:
-	cargo objdump -- -h $(EFI) | less
+	rust-objdump -h $(EFI) | less
 
 asm:
-	cargo objdump -- -d $(EFI) | less
+	rust-objdump -d $(EFI) | less
