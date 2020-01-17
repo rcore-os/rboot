@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(warnings)]
 
 use core::fmt;
 pub use uefi::proto::console::gop::ModeInfo;

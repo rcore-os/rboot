@@ -10,6 +10,7 @@
 #![no_std]
 #![no_main]
 #![feature(asm, abi_efiapi)]
+#![deny(warnings)]
 
 #[macro_use]
 extern crate alloc;
@@ -282,7 +283,7 @@ fn jump_to_entry(bootinfo: *const BootInfo) -> ! {
     unreachable!()
 }
 
-type KernelEntry = extern "C" fn(*const BootInfo) -> !;
+//type KernelEntry = extern "C" fn(*const BootInfo) -> !;
 /// The entry point of kernel, set by BSP.
 static mut ENTRY: usize = 0;
 /// Physical memory offset, set by BSP.

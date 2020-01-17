@@ -17,6 +17,7 @@ pub fn map_elf(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn map_stack(
     addr: u64,
     pages: u64,
@@ -34,11 +35,9 @@ pub fn map_stack(
         let frame = frame_allocator
             .allocate_frame()
             .ok_or(MapToError::FrameAllocationFailed)?;
-        unsafe {
-            page_table
-                .map_to(page, frame, flags, frame_allocator)?
-                .flush();
-        }
+        page_table
+            .map_to(page, frame, flags, frame_allocator)?
+            .flush();
     }
 
     Ok(())
@@ -75,12 +74,10 @@ fn map_segment(
             for frame in PhysFrame::range_inclusive(start_frame, end_frame) {
                 let offset = frame - start_frame;
                 let page = start_page + offset;
-                unsafe {
-                    let frame = UnusedPhysFrame::new(frame);
-                    page_table
-                        .map_to(page, frame, page_table_flags, frame_allocator)?
-                        .flush();
-                }
+                let frame = unsafe { UnusedPhysFrame::new(frame) };
+                page_table
+                    .map_to(page, frame, page_table_flags, frame_allocator)?
+                    .flush();
             }
 
             if mem_size > file_size {
@@ -116,11 +113,9 @@ fn map_segment(
                         });
                     }
 
-                    unsafe {
-                        page_table
-                            .map_to(last_page, new_frame, page_table_flags, frame_allocator)?
-                            .flush();
-                    }
+                    page_table
+                        .map_to(last_page, new_frame, page_table_flags, frame_allocator)?
+                        .flush();
                 }
 
                 // Map additional frames.
@@ -133,11 +128,9 @@ fn map_segment(
                     let frame = frame_allocator
                         .allocate_frame()
                         .ok_or(MapToError::FrameAllocationFailed)?;
-                    unsafe {
-                        page_table
-                            .map_to(page, frame, page_table_flags, frame_allocator)?
-                            .flush();
-                    }
+                    page_table
+                        .map_to(page, frame, page_table_flags, frame_allocator)?
+                        .flush();
                 }
 
                 // zero bss
