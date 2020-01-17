@@ -30,7 +30,7 @@ clippy:
 	cargo clippy $(BUILD_ARGS)
 
 doc:
-	cargo doc
+	cargo doc $(BUILD_ARGS)
 
 uefi-run: build
 	uefi-run \

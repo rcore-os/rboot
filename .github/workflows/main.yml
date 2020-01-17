@@ -21,6 +21,9 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -30,6 +33,6 @@ jobs:
           override: true
           components: rust-src
       - name: Build
-        run: make build
+        run: make build ARCH=${{ matrix.arch }}
       - name: Build docs
-        run: make doc
+        run: make doc ARCH=${{ matrix.arch }}
