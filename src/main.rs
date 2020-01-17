@@ -25,8 +25,8 @@ use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::pi::mp::MPServices;
 use uefi::table::boot::*;
 use uefi::table::cfg::ACPI2_GUID;
-use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Efer, EferFlags};
-use x86_64::structures::paging::{FrameAllocator, OffsetPageTable, PageTable, PhysFrame, Size4KiB};
+use x86_64::registers::control::*;
+use x86_64::structures::paging::*;
 use x86_64::{PhysAddr, VirtAddr};
 use xmas_elf::ElfFile;
 
@@ -205,12 +205,14 @@ fn current_page_table() -> OffsetPageTable<'static> {
 struct UEFIFrameAllocator<'a>(&'a BootServices);
 
 unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
-    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+    fn allocate_frame(&mut self) -> Option<UnusedPhysFrame> {
         let addr = self
             .0
             .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
             .expect_success("failed to allocate frame");
-        Some(PhysFrame::containing_address(PhysAddr::new(addr)))
+        let frame =
+            unsafe { UnusedPhysFrame::new(PhysFrame::containing_address(PhysAddr::new(addr))) };
+        Some(frame)
     }
 }
 
@@ -285,6 +287,3 @@ type KernelEntry = extern "C" fn(*const BootInfo) -> !;
 static mut ENTRY: usize = 0;
 /// Physical memory offset, set by BSP.
 static mut PHYSICAL_MEMORY_OFFSET: u64 = 0;
-
-#[no_mangle]
-pub static __rust_probestack: i32 = 0;

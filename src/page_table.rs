@@ -1,9 +1,6 @@
 //! This file is modified from 'page_table.rs' in 'rust-osdev/bootloader'
 
-use x86_64::structures::paging::{
-    mapper::*, FrameAllocator, Mapper, Page, PageSize, PageTableFlags, PhysFrame, Size2MiB,
-    Size4KiB,
-};
+use x86_64::structures::paging::{mapper::*, *};
 use x86_64::{align_up, PhysAddr, VirtAddr};
 use xmas_elf::{program, ElfFile};
 
@@ -79,6 +76,7 @@ fn map_segment(
                 let offset = frame - start_frame;
                 let page = start_page + offset;
                 unsafe {
+                    let frame = UnusedPhysFrame::new(frame);
                     page_table
                         .map_to(page, frame, page_table_flags, frame_allocator)?
                         .flush();
@@ -144,7 +142,11 @@ fn map_segment(
 
                 // zero bss
                 unsafe {
-                    core::ptr::write_bytes(zero_start.as_mut_ptr::<u8>(), 0, (mem_size - file_size) as usize);
+                    core::ptr::write_bytes(
+                        zero_start.as_mut_ptr::<u8>(),
+                        0,
+                        (mem_size - file_size) as usize,
+                    );
                 }
             }
         }
@@ -168,6 +170,7 @@ pub fn map_physical_memory(
         let page = Page::containing_address(VirtAddr::new(frame.start_address().as_u64() + offset));
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         unsafe {
+            let frame = UnusedPhysFrame::new(frame);
             page_table
                 .map_to(page, frame, flags, frame_allocator)
                 .expect("failed to map physical memory")
