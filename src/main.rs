@@ -269,21 +269,16 @@ extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
 
 /// Jump to ELF entry according to global variable `ENTRY`
 fn jump_to_entry(bootinfo: *const BootInfo) -> ! {
-    // HACK: why this way causes wrong argument?
-    //
-    // let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
-    // entry(bootinfo);
     unsafe {
         // TODO: Setup stack pointer safely
         //       Now rsp is pointing to physical mapping area without guard page.
-        asm!("add rsp, $0; jmp $1"
-            :: "m"(PHYSICAL_MEMORY_OFFSET), "r"(ENTRY), "{rdi}"(bootinfo)
-            :: "intel");
+        asm!("add rsp, $0" :: "m"(PHYSICAL_MEMORY_OFFSET) :: "intel");
     }
-    unreachable!()
+    let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
+    entry(bootinfo);
 }
 
-//type KernelEntry = extern "C" fn(*const BootInfo) -> !;
+type KernelEntry = extern "sysv64" fn(*const BootInfo) -> !;
 /// The entry point of kernel, set by BSP.
 static mut ENTRY: usize = 0;
 /// Physical memory offset, set by BSP.
