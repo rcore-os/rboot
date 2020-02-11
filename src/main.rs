@@ -136,6 +136,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         acpi2_rsdp_addr: acpi2_addr as u64,
         initramfs_addr,
         initramfs_size,
+        cmdline: config.cmdline,
     };
 
     jump_to_entry(&bootinfo);

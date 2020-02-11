@@ -15,6 +15,8 @@ pub struct Config<'a> {
     pub resolution: Option<(usize, usize)>,
     /// The path of initramfs
     pub initramfs: Option<&'a str>,
+    /// Kernel command line
+    pub cmdline: &'a str,
 }
 
 const DEFAULT_CONFIG: Config = Config {
@@ -24,6 +26,7 @@ const DEFAULT_CONFIG: Config = Config {
     kernel_path: "\\EFI\\rCore\\kernel.elf",
     resolution: None,
     initramfs: None,
+    cmdline: "",
 };
 
 impl<'a> Config<'a> {
@@ -46,12 +49,12 @@ impl<'a> Config<'a> {
     }
 
     fn process(&mut self, key: &str, value: &'a str) {
-        let r16 = u64::from_str_radix(&value[2..], 16);
-        let _r10 = value.parse::<u64>();
         match key {
 //            "kernel_stack_address" => self.kernel_stack_address = r16.unwrap(),
 //            "kernel_stack_size" => self.kernel_stack_size = r10.unwrap(),
-            "physical_memory_offset" => self.physical_memory_offset = r16.unwrap(),
+            "physical_memory_offset" => {
+                self.physical_memory_offset = u64::from_str_radix(&value[2..], 16).unwrap();
+            },
             "kernel_path" => self.kernel_path = value,
             "resolution" => {
                 let mut iter = value.split('x');
@@ -60,6 +63,7 @@ impl<'a> Config<'a> {
                 self.resolution = Some((x, y));
             }
             "initramfs" => self.initramfs = Some(value),
+            "cmdline" => self.cmdline = value,
             _ => warn!("undefined config key: {}", key),
         }
     }

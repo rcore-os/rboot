@@ -20,6 +20,8 @@ pub struct BootInfo {
     pub initramfs_addr: u64,
     /// The size of initramfs
     pub initramfs_size: u64,
+    /// Kernel command line
+    pub cmdline: &'static str,
 }
 
 pub struct MemoryMap {
