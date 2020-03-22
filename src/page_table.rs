@@ -8,7 +8,7 @@ pub fn map_elf(
     elf: &ElfFile,
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) -> Result<(), MapToError> {
+) -> Result<(), MapToError<Size4KiB>> {
     info!("mapping ELF");
     let kernel_start = PhysAddr::new(elf.input.as_ptr() as u64);
     for segment in elf.program_iter() {
@@ -23,7 +23,7 @@ pub fn map_stack(
     pages: u64,
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) -> Result<(), MapToError> {
+) -> Result<(), MapToError<Size4KiB>> {
     info!("mapping stack at {:#x}", addr);
     // create a stack
     let stack_start = Page::containing_address(VirtAddr::new(addr));
@@ -48,7 +48,7 @@ fn map_segment(
     kernel_start: PhysAddr,
     page_table: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) -> Result<(), MapToError> {
+) -> Result<(), MapToError<Size4KiB>> {
     match segment.get_type().unwrap() {
         program::Type::Load => {
             debug!("mapping segment: {:#x?}", segment);
