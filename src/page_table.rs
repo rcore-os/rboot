@@ -17,7 +17,6 @@ pub fn map_elf(
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn map_stack(
     addr: u64,
     pages: u64,

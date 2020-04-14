@@ -67,7 +67,6 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
     };
     unsafe {
         ENTRY = elf.header.pt2.entry_point() as usize;
-        PHYSICAL_MEMORY_OFFSET = config.physical_memory_offset;
     }
 
     let (initramfs_addr, initramfs_size) = if let Some(path) = config.initramfs {
@@ -100,14 +99,13 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
     }
     page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator(bs))
         .expect("failed to map ELF");
-    // we use UEFI default stack, no need to allocate
-    //    page_table::map_stack(
-    //        config.kernel_stack_address,
-    //        config.kernel_stack_size,
-    //        &mut page_table,
-    //        &mut UEFIFrameAllocator(bs),
-    //    )
-    //    .expect("failed to map stack");
+    page_table::map_stack(
+        config.kernel_stack_address,
+        config.kernel_stack_size,
+        &mut page_table,
+        &mut UEFIFrameAllocator(bs),
+    )
+    .expect("failed to map stack");
     page_table::map_physical_memory(
         config.physical_memory_offset,
         max_phys_addr,
@@ -119,7 +117,10 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
     }
 
-    start_aps(bs);
+    // FIXME: multi-core
+    //  All application processors will be shutdown after ExitBootService.
+    //  Disable now.
+    // start_aps(bs);
 
     info!("exit boot services");
 
@@ -138,8 +139,10 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         initramfs_size,
         cmdline: config.cmdline,
     };
-
-    jump_to_entry(&bootinfo);
+    let stacktop = config.kernel_stack_address + config.kernel_stack_size * 0x1000;
+    unsafe {
+        jump_to_entry(&bootinfo, stacktop);
+    }
 }
 
 /// Open file at `path`
@@ -229,6 +232,7 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
 }
 
 /// Startup all application processors
+#[allow(dead_code)]
 fn start_aps(bs: &BootServices) {
     info!("starting application processors");
     let mp = bs
@@ -275,22 +279,16 @@ fn start_aps(bs: &BootServices) {
 
 /// Main function for application processors
 extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
-    jump_to_entry(core::ptr::null());
+    unsafe {
+        jump_to_entry(core::ptr::null(), 0);
+    }
 }
 
 /// Jump to ELF entry according to global variable `ENTRY`
-fn jump_to_entry(bootinfo: *const BootInfo) -> ! {
-    unsafe {
-        // TODO: Setup stack pointer safely
-        //       Now rsp is pointing to physical mapping area without guard page.
-        asm!("add rsp, $0" :: "m"(PHYSICAL_MEMORY_OFFSET) :: "intel");
-    }
-    let entry: KernelEntry = unsafe { core::mem::transmute(ENTRY) };
-    entry(bootinfo);
+unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
+    asm!("call $0" :: "r"(ENTRY), "{rsp}"(stacktop), "{rdi}"(bootinfo) :: "intel");
+    loop {}
 }
 
-type KernelEntry = extern "sysv64" fn(*const BootInfo) -> !;
 /// The entry point of kernel, set by BSP.
 static mut ENTRY: usize = 0;
-/// Physical memory offset, set by BSP.
-static mut PHYSICAL_MEMORY_OFFSET: u64 = 0;

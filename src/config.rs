@@ -1,12 +1,14 @@
 // TODO: use no_std serde crate to parse
 
+use core::str::FromStr;
+
 /// Config for the bootloader
 #[derive(Debug)]
 pub struct Config<'a> {
-    // /// The address at which the kernel stack is placed
-    // pub kernel_stack_address: u64,
-    // /// The size of the kernel stack, given in number of 4KiB pages
-    // pub kernel_stack_size: u64,
+    /// The address at which the kernel stack is placed
+    pub kernel_stack_address: u64,
+    /// The size of the kernel stack, given in number of 4KiB pages
+    pub kernel_stack_size: u64,
     /// The offset into the virtual address space where the physical memory is mapped
     pub physical_memory_offset: u64,
     /// The path of kernel ELF
@@ -20,8 +22,8 @@ pub struct Config<'a> {
 }
 
 const DEFAULT_CONFIG: Config = Config {
-    // kernel_stack_address: 0xFFFF_FF80_0000_0000,
-    // kernel_stack_size: 8,
+    kernel_stack_address: 0xFFFF_FF01_0000_0000,
+    kernel_stack_size: 512,
     physical_memory_offset: 0xFFFF_8000_0000_0000,
     kernel_path: "\\EFI\\rCore\\kernel.elf",
     resolution: None,
@@ -49,11 +51,13 @@ impl<'a> Config<'a> {
     }
 
     fn process(&mut self, key: &str, value: &'a str) {
+        let r10 = u64::from_str(&value);
+        let r16 = u64::from_str_radix(&value[2..], 16);
         match key {
-            // "kernel_stack_address" => self.kernel_stack_address = r16.unwrap(),
-            // "kernel_stack_size" => self.kernel_stack_size = r10.unwrap(),
+            "kernel_stack_address" => self.kernel_stack_address = r16.unwrap(),
+            "kernel_stack_size" => self.kernel_stack_size = r10.unwrap(),
             "physical_memory_offset" => {
-                self.physical_memory_offset = u64::from_str_radix(&value[2..], 16).unwrap();
+                self.physical_memory_offset = r16.unwrap();
             }
             "kernel_path" => self.kernel_path = value,
             "resolution" => {
