@@ -20,9 +20,9 @@ pub struct Config<'a> {
 }
 
 const DEFAULT_CONFIG: Config = Config {
-    // kernel_stack_address: 0xFFFFFF8000000000,
-    // kernel_stack_size: 512,
-    physical_memory_offset: 0xFFFF800000000000,
+    // kernel_stack_address: 0xFFFF_FF80_0000_0000,
+    // kernel_stack_size: 8,
+    physical_memory_offset: 0xFFFF_8000_0000_0000,
     kernel_path: "\\EFI\\rCore\\kernel.elf",
     resolution: None,
     initramfs: None,
@@ -36,7 +36,7 @@ impl<'a> Config<'a> {
         for line in content.split('\n') {
             let line = line.trim();
             // skip empty and comment
-            if line.len() == 0 || line.chars().nth(0) == Some('#') {
+            if line.is_empty() || line.starts_with('#') {
                 continue;
             }
             // parse 'key=value'

@@ -16,6 +16,9 @@ endif
 build:
 	cargo build $(BUILD_ARGS)
 
+clippy:
+	cargo clippy $(BUILD_ARGS)
+
 doc:
 	cargo doc
 

@@ -89,7 +89,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         .map(|m| m.phys_start + m.page_count * 0x1000)
         .max()
         .unwrap()
-        .max(0x100000000); // include IOAPIC MMIO area
+        .max(0x1_0000_0000); // include IOAPIC MMIO area
 
     let mut page_table = current_page_table();
     // root page table is readonly

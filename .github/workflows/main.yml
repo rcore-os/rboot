@@ -3,15 +3,35 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  build:
-
+  check:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: |
-        rustup component add rust-src
-        make build
-    - name: Build docs
-      run: make doc
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2020-04-06
+          override: true
+          components: rustfmt, clippy
+      - name: Check code format
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+      - name: Clippy
+        run: make clippy
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2020-04-06
+          override: true
+          components: rust-src
+      - name: Build
+        run: make build
+      - name: Build docs
+        run: make doc
