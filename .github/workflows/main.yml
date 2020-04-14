@@ -12,14 +12,12 @@ jobs:
           profile: minimal
           toolchain: nightly-2020-04-06
           override: true
-          components: rust-src, rustfmt, clippy
+          components: rustfmt
       - name: Check code format
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
-      - name: Clippy
-        run: make clippy
 
   build:
     runs-on: ubuntu-latest
