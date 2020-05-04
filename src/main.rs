@@ -25,7 +25,7 @@ use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::pi::mp::MPServices;
 use uefi::table::boot::*;
-use uefi::table::cfg::ACPI2_GUID;
+use uefi::table::cfg::{ACPI2_GUID, SMBIOS_GUID};
 use x86_64::registers::control::*;
 use x86_64::structures::paging::*;
 use x86_64::{PhysAddr, VirtAddr};
@@ -59,6 +59,14 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         .expect("failed to find ACPI 2 RSDP")
         .address;
     info!("acpi2: {:?}", acpi2_addr);
+
+    let smbios_addr = st
+        .config_table()
+        .iter()
+        .find(|entry| entry.guid == SMBIOS_GUID)
+        .expect("failed to find SMBIOS")
+        .address;
+    info!("smbios: {:?}", smbios_addr);
 
     let elf = {
         let mut file = open_file(bs, config.kernel_path);
@@ -135,6 +143,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         physical_memory_offset: config.physical_memory_offset,
         graphic_info,
         acpi2_rsdp_addr: acpi2_addr as u64,
+        smbios_addr: smbios_addr as u64,
         initramfs_addr,
         initramfs_size,
         cmdline: config.cmdline,

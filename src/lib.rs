@@ -16,6 +16,8 @@ pub struct BootInfo {
     pub graphic_info: GraphicInfo,
     /// Physical address of ACPI2 RSDP
     pub acpi2_rsdp_addr: u64,
+    /// Physical address of SMBIOS
+    pub smbios_addr: u64,
     /// The start physical address of initramfs
     pub initramfs_addr: u64,
     /// The size of initramfs
