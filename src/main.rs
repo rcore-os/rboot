@@ -86,7 +86,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
     };
 
     let max_mmap_size = st.boot_services().memory_map_size();
-    let mmap_storage = Box::leak(vec![0; max_mmap_size].into_boxed_slice());
+    let mmap_storage = Box::leak(vec![0; max_mmap_size * 2].into_boxed_slice());
     let mmap_iter = st
         .boot_services()
         .memory_map(mmap_storage)

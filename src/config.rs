@@ -51,13 +51,13 @@ impl<'a> Config<'a> {
     }
 
     fn process(&mut self, key: &str, value: &'a str) {
-        let r10 = u64::from_str(&value);
-        let r16 = u64::from_str_radix(&value[2..], 16);
+        let r10 = || u64::from_str(&value).unwrap();
+        let r16 = || u64::from_str_radix(&value[2..], 16).unwrap();
         match key {
-            "kernel_stack_address" => self.kernel_stack_address = r16.unwrap(),
-            "kernel_stack_size" => self.kernel_stack_size = r10.unwrap(),
+            "kernel_stack_address" => self.kernel_stack_address = r16(),
+            "kernel_stack_size" => self.kernel_stack_size = r10(),
             "physical_memory_offset" => {
-                self.physical_memory_offset = r16.unwrap();
+                self.physical_memory_offset = r16();
             }
             "kernel_path" => self.kernel_path = value,
             "resolution" => {
