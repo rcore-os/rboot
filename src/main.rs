@@ -4,18 +4,18 @@
 //! 2. Load kernel ELF file
 //! 3. Map ELF segments to virtual memory
 //! 4. Map kernel stack and all physical memory
-//! 5. Startup all processors
-//! 6. Exit boot and jump to ELF entry
+//! 5. Exit boot and jump to ELF entry
 
 #![no_std]
 #![no_main]
-#![feature(asm, abi_efiapi)]
+#![feature(llvm_asm, abi_efiapi)]
 #![deny(warnings)]
 
 #[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate log;
+extern crate rlibc;
 
 use alloc::boxed::Box;
 use rboot::{BootInfo, GraphicInfo, MemoryMap};
@@ -229,13 +229,12 @@ fn current_page_table() -> OffsetPageTable<'static> {
 struct UEFIFrameAllocator<'a>(&'a BootServices);
 
 unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
-    fn allocate_frame(&mut self) -> Option<UnusedPhysFrame> {
+    fn allocate_frame(&mut self) -> Option<PhysFrame> {
         let addr = self
             .0
             .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
             .expect_success("failed to allocate frame");
-        let frame =
-            unsafe { UnusedPhysFrame::new(PhysFrame::containing_address(PhysAddr::new(addr))) };
+        let frame = PhysFrame::containing_address(PhysAddr::new(addr));
         Some(frame)
     }
 }
@@ -295,7 +294,7 @@ extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
 
 /// Jump to ELF entry according to global variable `ENTRY`
 unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
-    asm!("call $0" :: "r"(ENTRY), "{rsp}"(stacktop), "{rdi}"(bootinfo) :: "intel");
+    llvm_asm!("call $0" :: "r"(ENTRY), "{rsp}"(stacktop), "{rdi}"(bootinfo) :: "intel");
     loop {}
 }
 
