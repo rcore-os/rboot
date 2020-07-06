@@ -3,7 +3,7 @@
 use aarch64::{
     align_up,
     paging::{mapper::*, memory_attribute::*, PageTableFlags as PTF, *},
-    translation::ttbr_el1_read,
+    translation::{ttbr_el1_read, ttbr_el1_write},
     PhysAddr, VirtAddr,
 };
 #[cfg(target_arch = "x86_64")]
@@ -37,6 +37,15 @@ pub fn current_page_table() -> MappedPageTable<'static, fn(PhysFrame) -> *mut Pa
     let p4_table_addr = ttbr_el1_read(1).start_address().as_u64();
     let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
     unsafe { MappedPageTable::new(p4_table, frame_to_page_table) }
+}
+
+#[cfg(target_arch = "aarch64")]
+pub fn init_kernel_page_table(frame_allocator: &mut impl FrameAllocator<Size4KiB>) {
+    let frame = frame_allocator.allocate_frame().unwrap();
+    let p4_table_addr = frame.start_address().as_u64();
+    let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
+    p4_table.zero();
+    ttbr_el1_write(1, frame);
 }
 
 pub fn map_elf(
@@ -202,7 +211,7 @@ fn default_ptf() -> PTF {
 
 #[cfg(target_arch = "aarch64")]
 fn default_ptf() -> PTF {
-    PTF::VALID
+    PTF::VALID | PTF::PXN
 }
 
 #[cfg(target_arch = "x86_64")]
