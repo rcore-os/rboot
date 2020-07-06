@@ -103,9 +103,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         .unwrap()
         .max(0x1_0000_0000); // include IOAPIC MMIO area
 
-    #[cfg(target_arch = "aarch64")]
-    page_table::init_kernel_page_table(&mut UEFIFrameAllocator(bs));
-    let mut page_table = page_table::current_page_table();
+    let mut page_table = page_table::current_page_table(&mut UEFIFrameAllocator(bs));
     // root page table is readonly
     // disable write protect
     #[cfg(target_arch = "x86_64")]

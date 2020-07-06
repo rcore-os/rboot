@@ -2,8 +2,9 @@
 #[cfg(target_arch = "aarch64")]
 use aarch64::{
     align_up,
-    paging::{mapper::*, memory_attribute::*, PageTableFlags as PTF, *},
-    translation::{ttbr_el1_read, ttbr_el1_write},
+    paging::{mapper::*, page_table::MEMORY_ATTRIBUTE, PageTableFlags as PTF, *},
+    regs::*,
+    translation::{local_invalidate_tlb_all, ttbr_el1_write},
     PhysAddr, VirtAddr,
 };
 #[cfg(target_arch = "x86_64")]
@@ -22,7 +23,9 @@ type MapToError_ = MapToError;
 
 /// Get current page table from CR3
 #[cfg(target_arch = "x86_64")]
-pub fn current_page_table() -> OffsetPageTable<'static> {
+pub fn current_page_table(
+    _frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+) -> OffsetPageTable<'static> {
     let p4_table_addr = Cr3::read().0.start_address().as_u64();
     let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
     unsafe { OffsetPageTable::new(p4_table, VirtAddr::new(0)) }
@@ -30,22 +33,42 @@ pub fn current_page_table() -> OffsetPageTable<'static> {
 
 /// Get current page table
 #[cfg(target_arch = "aarch64")]
-pub fn current_page_table() -> MappedPageTable<'static, fn(PhysFrame) -> *mut PageTable> {
+pub fn current_page_table(
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+) -> MappedPageTable<'static, fn(PhysFrame) -> *mut PageTable> {
     fn frame_to_page_table(frame: PhysFrame) -> *mut PageTable {
         frame.start_address().as_u64() as _
     }
-    let p4_table_addr = ttbr_el1_read(1).start_address().as_u64();
-    let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
-    unsafe { MappedPageTable::new(p4_table, frame_to_page_table) }
-}
 
-#[cfg(target_arch = "aarch64")]
-pub fn init_kernel_page_table(frame_allocator: &mut impl FrameAllocator<Size4KiB>) {
     let frame = frame_allocator.allocate_frame().unwrap();
     let p4_table_addr = frame.start_address().as_u64();
     let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
     p4_table.zero();
+
+    let ips = ID_AA64MMFR0_EL1.read(ID_AA64MMFR0_EL1::PARange);
+    TCR_EL1.write(
+        TCR_EL1::TBI1::Ignored
+            + TCR_EL1::TBI0::Ignored
+            + TCR_EL1::AS::Bits_16
+            + TCR_EL1::IPS.val(ips)
+            + TCR_EL1::TG1::KiB_4
+            + TCR_EL1::SH1::Inner
+            + TCR_EL1::ORGN1::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+            + TCR_EL1::IRGN1::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+            + TCR_EL1::EPD1::EnableTTBR1Walks
+            + TCR_EL1::A1::UseTTBR0ASID
+            + TCR_EL1::T1SZ.val(16)
+            + TCR_EL1::TG0::KiB_4
+            + TCR_EL1::SH0::Inner
+            + TCR_EL1::ORGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+            + TCR_EL1::IRGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+            + TCR_EL1::EPD0::EnableTTBR0Walks
+            + TCR_EL1::T0SZ.val(24),
+    );
     ttbr_el1_write(1, frame);
+    local_invalidate_tlb_all();
+
+    unsafe { MappedPageTable::new(p4_table, frame_to_page_table) }
 }
 
 pub fn map_elf(
@@ -211,7 +234,7 @@ fn default_ptf() -> PTF {
 
 #[cfg(target_arch = "aarch64")]
 fn default_ptf() -> PTF {
-    PTF::VALID | PTF::PXN
+    PTF::default_page()
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -228,9 +251,9 @@ fn trans_flags(flags: program::Flags) -> PTF {
 
 #[cfg(target_arch = "aarch64")]
 fn trans_flags(flags: program::Flags) -> PTF {
-    let mut page_table_flags = PTF::VALID;
+    let mut page_table_flags = PTF::default_page();
     if !flags.is_execute() {
-        page_table_flags |= PTF::PXN
+        page_table_flags |= PTF::PXN | PTF::UXN;
     };
     if !flags.is_write() {
         page_table_flags |= PTF::AP_RO
@@ -257,11 +280,7 @@ unsafe fn map<S: PageSize>(
     flags: PTF,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) -> Result<MapperFlush<S>, MapToError> {
-    page_table.map_to(
-        page,
-        frame,
-        flags,
-        MairNormal::attr_value(),
-        frame_allocator,
-    )
+    // UEFI's MAIR_EL1 is 0xff_bb_44_00, the normal attribute index is 3.
+    let normal_attr = MEMORY_ATTRIBUTE::SH::InnerShareable + MEMORY_ATTRIBUTE::AttrIndx.val(3);
+    page_table.map_to(page, frame, flags, normal_attr, frame_allocator)
 }
