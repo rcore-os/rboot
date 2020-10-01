@@ -24,7 +24,6 @@ use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::proto::pi::mp::MPServices;
 use uefi::table::boot::*;
 use uefi::table::cfg::{ACPI2_GUID, SMBIOS_GUID};
 use x86_64::registers::control::*;
@@ -125,11 +124,6 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
     unsafe {
         Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
     }
-
-    // FIXME: multi-core
-    //  All application processors will be shutdown after ExitBootService.
-    //  Disable now.
-    // start_aps(bs);
 
     info!("exit boot services");
 
@@ -243,59 +237,6 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
             .expect_success("failed to allocate frame");
         let frame = PhysFrame::containing_address(PhysAddr::new(addr));
         Some(frame)
-    }
-}
-
-/// Startup all application processors
-#[allow(dead_code)]
-fn start_aps(bs: &BootServices) {
-    info!("starting application processors");
-    let mp = bs
-        .locate_protocol::<MPServices>()
-        .expect_success("failed to get MPServices");
-    let mp = mp.get();
-
-    // this event will never be signaled
-    let event = unsafe {
-        bs.create_event(EventType::empty(), Tpl::APPLICATION, None)
-            .expect_success("failed to create event")
-    };
-
-    // workaround as uefi crate do not implement non-blocking call
-    use core::ffi::c_void;
-    use uefi::proto::pi::mp::Procedure;
-    type StartupAllAps = extern "efiapi" fn(
-        this: *const MPServices,
-        procedure: Procedure,
-        single_thread: bool,
-        wait_event: *mut c_void,
-        timeout_in_micro_seconds: usize,
-        procedure_argument: *mut c_void,
-        failed_cpu_list: *mut *mut usize,
-    ) -> Status;
-    let startup_all_aps = unsafe { *((mp as *const usize).add(2) as *const StartupAllAps) };
-    let event_ptr = unsafe { core::mem::transmute(event) };
-    let status = startup_all_aps(
-        mp,
-        ap_main,
-        false,
-        event_ptr,
-        0,
-        core::ptr::null_mut(),
-        core::ptr::null_mut(),
-    );
-    if !status.is_success() {
-        warn!(
-            "failed to startup all application processors with {:?}",
-            status
-        );
-    }
-}
-
-/// Main function for application processors
-extern "efiapi" fn ap_main(_arg: *mut core::ffi::c_void) {
-    unsafe {
-        jump_to_entry(core::ptr::null(), 0);
     }
 }
 
