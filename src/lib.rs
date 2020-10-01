@@ -1,15 +1,17 @@
 #![no_std]
 #![deny(warnings)]
 
-use core::fmt;
+extern crate alloc;
+
+use alloc::vec::Vec;
 pub use uefi::proto::console::gop::ModeInfo;
-pub use uefi::table::boot::{MemoryAttribute, MemoryDescriptor, MemoryMapIter, MemoryType};
+pub use uefi::table::boot::{MemoryAttribute, MemoryDescriptor, MemoryType};
 
 /// This structure represents the information that the bootloader passes to the kernel.
 #[repr(C)]
 #[derive(Debug)]
 pub struct BootInfo {
-    pub memory_map: MemoryMap,
+    pub memory_map: Vec<&'static MemoryDescriptor>,
     /// The offset into the virtual address space where the physical memory is mapped.
     pub physical_memory_offset: u64,
     /// The graphic output information
@@ -26,10 +28,6 @@ pub struct BootInfo {
     pub cmdline: &'static str,
 }
 
-pub struct MemoryMap {
-    pub iter: MemoryMapIter<'static>,
-}
-
 /// Graphic output information
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -40,20 +38,4 @@ pub struct GraphicInfo {
     pub fb_addr: u64,
     /// Framebuffer size
     pub fb_size: u64,
-}
-
-impl Clone for MemoryMap {
-    fn clone(&self) -> Self {
-        unsafe { core::ptr::read(self) }
-    }
-}
-
-impl fmt::Debug for MemoryMap {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut f = f.debug_list();
-        for mmap in self.clone().iter {
-            f.entry(mmap);
-        }
-        f.finish()
-    }
 }

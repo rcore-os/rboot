@@ -18,7 +18,8 @@ extern crate log;
 extern crate rlibc;
 
 use alloc::boxed::Box;
-use rboot::{BootInfo, GraphicInfo, MemoryMap};
+use alloc::vec::Vec;
+use rboot::{BootInfo, GraphicInfo};
 use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::media::file::*;
@@ -132,14 +133,20 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
 
     info!("exit boot services");
 
+    let mut memory_map = Vec::with_capacity(128);
+
     let (_rt, mmap_iter) = st
         .exit_boot_services(image, mmap_storage)
         .expect_success("Failed to exit boot services");
     // NOTE: alloc & log can no longer be used
 
+    for desc in mmap_iter {
+        memory_map.push(desc);
+    }
+
     // construct BootInfo
     let bootinfo = BootInfo {
-        memory_map: MemoryMap { iter: mmap_iter },
+        memory_map,
         physical_memory_offset: config.physical_memory_offset,
         graphic_info,
         acpi2_rsdp_addr: acpi2_addr as u64,
