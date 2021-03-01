@@ -2,7 +2,6 @@ MODE ?= release
 EFI := target/x86_64-unknown-uefi/$(MODE)/rboot.efi
 OVMF := OVMF.fd
 ESP := esp
-BUILD_ARGS := -Z build-std=core,alloc --target x86_64-unknown-uefi
 QEMU_ARGS := -net none -smp cores=4 -nographic
 #	-debugcon file:debug.log -global isa-debugcon.iobase=0x402
 

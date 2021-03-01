@@ -1,6 +1,6 @@
 [package]
 name = "rboot"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Runji Wang <wangrunji0408@163.com>"]
 edition = "2018"
 description = "The x86_64 UEFI bootloader for rCore"
@@ -8,12 +8,11 @@ description = "The x86_64 UEFI bootloader for rCore"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uefi = "0.6.0"
-uefi-services = { version = "0.3.0", optional = true }
+uefi = "0.8.0"
+uefi-services = { version = "0.5.0", optional = true }
 log = "0.4"
 xmas-elf = "0.7"
-x86_64 = "0.12"
-rlibc = "1.0.0"
+x86_64 = "0.13.2"
 
 [features]
 rboot = ["uefi-services"]

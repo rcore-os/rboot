@@ -15,7 +15,6 @@
 extern crate alloc;
 #[macro_use]
 extern crate log;
-extern crate rlibc;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
