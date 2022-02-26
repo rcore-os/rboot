@@ -8,7 +8,7 @@
 
 #![no_std]
 #![no_main]
-#![feature(llvm_asm, abi_efiapi)]
+#![feature(abi_efiapi)]
 
 #[macro_use]
 extern crate alloc;
@@ -17,6 +17,7 @@ extern crate log;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::arch::asm;
 use rboot::{BootInfo, GraphicInfo};
 use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
@@ -35,9 +36,9 @@ mod page_table;
 const CONFIG_PATH: &str = "\\EFI\\Boot\\rboot.conf";
 
 #[entry]
-fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
+fn efi_main(image: uefi::Handle, mut st: SystemTable<Boot>) -> Status {
     // Initialize utilities (logging, memory allocation...)
-    uefi_services::init(&st).expect_success("failed to initialize utilities");
+    uefi_services::init(&mut st).expect_success("failed to initialize utilities");
 
     info!("bootloader is running");
     let bs = st.boot_services();
@@ -83,7 +84,7 @@ fn efi_main(image: uefi::Handle, st: SystemTable<Boot>) -> Status {
         (0, 0)
     };
 
-    let max_mmap_size = st.boot_services().memory_map_size();
+    let max_mmap_size = st.boot_services().memory_map_size().map_size;
     let mmap_storage = Box::leak(vec![0; max_mmap_size * 2].into_boxed_slice());
     let mmap_iter = st
         .boot_services()
@@ -240,7 +241,7 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
 
 /// Jump to ELF entry according to global variable `ENTRY`
 unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
-    llvm_asm!("call $0" :: "r"(ENTRY), "{rsp}"(stacktop), "{rdi}"(bootinfo) :: "intel");
+    asm!("mov rsp, {}; call {}", in(reg) stacktop, in(reg) ENTRY, in("rdi") bootinfo);
     loop {}
 }
 
