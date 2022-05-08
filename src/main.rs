@@ -19,12 +19,12 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
 use rboot::{BootInfo, GraphicInfo};
-use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::table::boot::*;
 use uefi::table::cfg::{ACPI2_GUID, SMBIOS_GUID};
+use uefi::{prelude::*, CStr16};
 use x86_64::registers::control::*;
 use x86_64::structures::paging::*;
 use x86_64::{PhysAddr, VirtAddr};
@@ -38,7 +38,7 @@ const CONFIG_PATH: &str = "\\EFI\\Boot\\rboot.conf";
 #[entry]
 fn efi_main(image: uefi::Handle, mut st: SystemTable<Boot>) -> Status {
     // Initialize utilities (logging, memory allocation...)
-    uefi_services::init(&mut st).expect_success("failed to initialize utilities");
+    uefi_services::init(&mut st).expect("failed to initialize utilities");
 
     info!("bootloader is running");
     let bs = st.boot_services();
@@ -89,7 +89,7 @@ fn efi_main(image: uefi::Handle, mut st: SystemTable<Boot>) -> Status {
     let mmap_iter = st
         .boot_services()
         .memory_map(mmap_storage)
-        .expect_success("failed to get memory map")
+        .expect("failed to get memory map")
         .1;
     let max_phys_addr = mmap_iter
         .map(|m| m.phys_start + m.page_count * 0x1000)
@@ -130,7 +130,7 @@ fn efi_main(image: uefi::Handle, mut st: SystemTable<Boot>) -> Status {
 
     let (_rt, mmap_iter) = st
         .exit_boot_services(image, mmap_storage)
-        .expect_success("Failed to exit boot services");
+        .expect("Failed to exit boot services");
     // NOTE: alloc & log can no longer be used
 
     for desc in mmap_iter {
@@ -160,15 +160,17 @@ fn open_file(bs: &BootServices, path: &str) -> RegularFile {
     // FIXME: use LoadedImageProtocol to get the FileSystem of this image
     let fs = bs
         .locate_protocol::<SimpleFileSystem>()
-        .expect_success("failed to get FileSystem");
+        .expect("failed to get FileSystem");
     let fs = unsafe { &mut *fs.get() };
-
-    let mut root = fs.open_volume().expect_success("failed to open volume");
+    // FIXME: convert `str` to `CStr16` without a fixed buf.
+    let mut buf = [0u16; 256];
+    let path = CStr16::from_str_with_buf(path, &mut buf).expect("failed to convert path to ucs-2");
+    let mut root = fs.open_volume().expect("failed to open volume");
     let handle = root
         .open(path, FileMode::Read, FileAttribute::empty())
-        .expect_success("failed to open file");
+        .expect("failed to open file");
 
-    match handle.into_type().expect_success("failed to into_type") {
+    match handle.into_type().expect("failed to into_type") {
         FileType::Regular(regular) => regular,
         _ => panic!("Invalid file type"),
     }
@@ -180,13 +182,13 @@ fn load_file(bs: &BootServices, file: &mut RegularFile) -> &'static mut [u8] {
     let mut info_buf = [0u8; 0x100];
     let info = file
         .get_info::<FileInfo>(&mut info_buf)
-        .expect_success("failed to get file info");
+        .expect("failed to get file info");
     let pages = info.file_size() as usize / 0x1000 + 1;
     let mem_start = bs
         .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, pages)
-        .expect_success("failed to allocate pages");
+        .expect("failed to allocate pages");
     let buf = unsafe { core::slice::from_raw_parts_mut(mem_start as *mut u8, pages * 0x1000) };
-    let len = file.read(buf).expect_success("failed to read file");
+    let len = file.read(buf).expect("failed to read file");
     &mut buf[..len]
 }
 
@@ -195,21 +197,19 @@ fn load_file(bs: &BootServices, file: &mut RegularFile) -> &'static mut [u8] {
 fn init_graphic(bs: &BootServices, resolution: Option<(usize, usize)>) -> GraphicInfo {
     let gop = bs
         .locate_protocol::<GraphicsOutput>()
-        .expect_success("failed to get GraphicsOutput");
+        .expect("failed to get GraphicsOutput");
     let gop = unsafe { &mut *gop.get() };
 
     if let Some(resolution) = resolution {
         let mode = gop
             .modes()
-            .map(|mode| mode.expect("Warnings encountered while querying mode"))
-            .find(|ref mode| {
+            .find(|mode| {
                 let info = mode.info();
                 info.resolution() == resolution
             })
             .expect("graphic mode not found");
         info!("switching graphic mode");
-        gop.set_mode(&mode)
-            .expect_success("Failed to set graphics mode");
+        gop.set_mode(&mode).expect("Failed to set graphics mode");
     }
     GraphicInfo {
         mode: gop.current_mode_info(),
@@ -233,7 +233,7 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
         let addr = self
             .0
             .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
-            .expect_success("failed to allocate frame");
+            .expect("failed to allocate frame");
         let frame = PhysFrame::containing_address(PhysAddr::new(addr));
         Some(frame)
     }
@@ -242,7 +242,9 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator<'_> {
 /// Jump to ELF entry according to global variable `ENTRY`
 unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
     asm!("mov rsp, {}; call {}", in(reg) stacktop, in(reg) ENTRY, in("rdi") bootinfo);
-    loop {}
+    loop {
+        asm!("nop");
+    }
 }
 
 /// The entry point of kernel, set by BSP.
