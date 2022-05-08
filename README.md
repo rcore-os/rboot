@@ -4,6 +4,7 @@
 
 The x86_64 UEFI bootloader for rCore OS.
 
-### rustc info
-- current rustc -- rustc 1.56.0-nightly (08095fc1f 2021-07-26)
+## rustc info
+
+- current rustc -- rustc 1.62.0-nightly (ea92b0838 2022-05-07)
 - current rust-toolchain -- nightly

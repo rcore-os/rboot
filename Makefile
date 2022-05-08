@@ -5,7 +5,6 @@ ESP := esp
 QEMU_ARGS := -net none -smp cores=4 -nographic
 #	-debugcon file:debug.log -global isa-debugcon.iobase=0x402
 
-
 ifeq (${MODE}, release)
 	BUILD_ARGS += --release
 endif

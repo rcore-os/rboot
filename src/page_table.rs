@@ -108,7 +108,7 @@ fn map_segment(
             }
 
             // remap last page
-            if let Err(e) = page_table.unmap(last_page.clone()) {
+            if let Err(e) = page_table.unmap(last_page) {
                 return Err(match e {
                     UnmapError::ParentEntryHugePage => MapToError::ParentEntryHugePage,
                     UnmapError::PageNotMapped => unreachable!(),

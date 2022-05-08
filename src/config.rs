@@ -51,7 +51,7 @@ impl<'a> Config<'a> {
     }
 
     fn process(&mut self, key: &str, value: &'a str) {
-        let r10 = || u64::from_str(&value).unwrap();
+        let r10 = || u64::from_str(value).unwrap();
         let r16 = || u64::from_str_radix(&value[2..], 16).unwrap();
         match key {
             "kernel_stack_address" => self.kernel_stack_address = r16(),
