@@ -8,8 +8,8 @@ description = "The x86_64 UEFI bootloader for rCore"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uefi = "0.15"
-uefi-services = { version = "0.12", optional = true }
+uefi = "0.16"
+uefi-services = { version = "0.13", optional = true }
 log = "0.4"
 xmas-elf = "0.8"
 x86_64 = "0.14"
