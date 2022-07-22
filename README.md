@@ -6,5 +6,7 @@ The x86_64 UEFI bootloader for rCore OS.
 
 ## rustc info
 
-- current rustc -- rustc 1.62.0-nightly (ea92b0838 2022-05-07)
-- current rust-toolchain -- nightly
+> This project won't use the newest nightly toolchain, see the [issue#452](https://github.com/rust-osdev/uefi-rs/issues/452) of [uefi](https://crates.io/crates/uefi) crate
+
+- current rustc -- rustc 1.64.0-nightly (9a7b7d5e5 2022-07-19)
+- current rust-toolchain -- nightly-2022-07-20

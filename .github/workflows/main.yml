@@ -3,35 +3,31 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2022-05-07
-          override: true
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v1
-      - name: Check code format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2022-05-07
+          toolchain: nightly-2022-07-20
+          components: rustfmt
           override: true
-          components: rust-src
-      - uses: Swatinem/rust-cache@v1
+
+      - name: Check code format
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --check
+
       - name: Build
-        run: make build
-      - name: Build docs
-        run: make doc
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
