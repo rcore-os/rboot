@@ -2,12 +2,6 @@
 
 The x86_64 UEFI bootloader for rCore / zCore OS.
 
-## Prerequisites
-
-- Rust nightly toolchain (see `rust-toolchain.toml`)
-- QEMU with x86_64 support
-- OVMF firmware (`OVMF.fd`)
-
 ## Build
 
 ```sh
@@ -16,34 +10,15 @@ cargo build --release --target x86_64-unknown-uefi
 
 The output EFI binary is at `target/x86_64-unknown-uefi/release/rboot.efi`.
 
-## Run in QEMU
+## Example
 
-1. Create the ESP (EFI System Partition) directory:
+See [`example-kernel/`](example-kernel/) for a minimal bare-metal kernel that boots via rboot and prints to serial.
 
-```sh
-mkdir -p esp/EFI/Boot esp/EFI/rCore
-cp target/x86_64-unknown-uefi/release/rboot.efi esp/EFI/Boot/BootX64.efi
-cp rboot.conf esp/EFI/Boot/rboot.conf
-cp /path/to/kernel.elf esp/EFI/rCore/kernel.elf
-```
-
-2. Launch QEMU:
-
-```sh
-qemu-system-x86_64 \
-  -machine q35 \
-  -cpu qemu64 \
-  -m 512M \
-  -drive format=raw,if=pflash,readonly=on,file=OVMF.fd \
-  -drive format=raw,file=fat:rw:esp \
-  -nographic \
-  -serial mon:stdio \
-  -no-reboot
-```
+Run `example-kernel/test.sh` to build and test in QEMU.
 
 ## Configuration
 
-Edit `rboot.conf` to configure the bootloader. See the file for available options:
+Edit `rboot.conf` to configure the bootloader. See [`example-kernel/rboot.conf`](example-kernel/rboot.conf) for a working example. Available options:
 
 - `kernel_path` - path to the kernel ELF binary
 - `kernel_stack_address` - virtual address for the kernel stack

@@ -1,18 +1,17 @@
 #!/bin/bash
-# End-to-end test for rboot: build bootloader + test kernel, run in QEMU
+# End-to-end test for rboot: build bootloader + example kernel, run in QEMU
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RBOOT_DIR="$(dirname "$SCRIPT_DIR")"
-TEST_KERNEL_DIR="$SCRIPT_DIR/test-kernel"
 ESP_DIR="$SCRIPT_DIR/esp"
 
 echo "=== Building rboot ==="
 cd "$RBOOT_DIR"
 cargo build --release --target x86_64-unknown-uefi
 
-echo "=== Building test kernel ==="
-cd "$TEST_KERNEL_DIR"
+echo "=== Building example kernel ==="
+cd "$SCRIPT_DIR"
 RUSTFLAGS="-C link-arg=--image-base=0xffffffff80000000 -C relocation-model=static" cargo build --release
 
 echo "=== Preparing ESP ==="
@@ -20,7 +19,7 @@ rm -rf "$ESP_DIR"
 mkdir -p "$ESP_DIR/EFI/Boot" "$ESP_DIR/EFI/zCore"
 cp "$RBOOT_DIR/target/x86_64-unknown-uefi/release/rboot.efi" "$ESP_DIR/EFI/Boot/BootX64.efi"
 cp "$SCRIPT_DIR/rboot.conf" "$ESP_DIR/EFI/Boot/rboot.conf"
-cp "$TEST_KERNEL_DIR/target/x86_64-unknown-none/release/test-kernel" "$ESP_DIR/EFI/zCore/test-kernel"
+cp "$SCRIPT_DIR/target/x86_64-unknown-none/release/example-kernel" "$ESP_DIR/EFI/zCore/example-kernel"
 
 echo "=== Running QEMU ==="
 OVMF="$RBOOT_DIR/OVMF.fd"

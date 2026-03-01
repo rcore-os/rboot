@@ -32,4 +32,4 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
 
       - name: Run end-to-end test
-        run: ./tests/run-test.sh
+        run: ./example-kernel/test.sh
