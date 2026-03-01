@@ -6,28 +6,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2022-07-20
-          components: rustfmt
-          override: true
+      - name: Install Rust toolchain
+        run: rustup show
 
       - name: Check code format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --check
+        run: cargo fmt --check
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+        run: cargo build --release --target x86_64-unknown-uefi
 
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
+      - name: Doc
+        run: cargo doc --target x86_64-unknown-uefi

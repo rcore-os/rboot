@@ -19,9 +19,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::ptr::NonNull;
 use rboot::{BootInfo, GraphicInfo};
-use uefi::boot::{
-    self, AllocateType, MemoryDescriptor, MemoryType, ScopedProtocol,
-};
+use uefi::boot::{self, AllocateType, MemoryDescriptor, MemoryType, ScopedProtocol};
 use uefi::mem::memory_map::{MemoryMap, MemoryMapOwned};
 use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
@@ -86,8 +84,7 @@ fn efi_main() -> Status {
         (0, 0)
     };
 
-    let mmap = boot::memory_map(MemoryType::LOADER_DATA)
-        .expect("failed to get memory map");
+    let mmap = boot::memory_map(MemoryType::LOADER_DATA).expect("failed to get memory map");
     let max_phys_addr = mmap
         .entries()
         .map(|m| m.phys_start + m.page_count * 0x1000)
@@ -102,8 +99,7 @@ fn efi_main() -> Status {
         Cr0::update(|f| f.remove(Cr0Flags::WRITE_PROTECT));
         Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
     }
-    page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator)
-        .expect("failed to map ELF");
+    page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator).expect("failed to map ELF");
     page_table::map_stack(
         config.kernel_stack_address,
         config.kernel_stack_size,
@@ -152,12 +148,13 @@ fn efi_main() -> Status {
 /// Open file at `path`
 fn open_file(path: &str) -> RegularFile {
     info!("opening file: {}", path);
-    let handle = boot::get_handle_for_protocol::<SimpleFileSystem>()
-        .expect("failed to get FileSystem");
+    let handle =
+        boot::get_handle_for_protocol::<SimpleFileSystem>().expect("failed to get FileSystem");
     let mut fs = boot::open_protocol_exclusive::<SimpleFileSystem>(handle)
         .expect("failed to open FileSystem");
     let mut buf = [0u16; 256];
-    let path = uefi::CStr16::from_str_with_buf(path, &mut buf).expect("failed to convert path to ucs-2");
+    let path =
+        uefi::CStr16::from_str_with_buf(path, &mut buf).expect("failed to convert path to ucs-2");
     let mut root = fs.open_volume().expect("failed to open volume");
     let handle = root
         .open(path, FileMode::Read, FileAttribute::empty())
@@ -187,8 +184,8 @@ fn load_file(file: &mut RegularFile) -> &'static mut [u8] {
 /// If `resolution` is some, then set graphic mode matching the resolution.
 /// Return information of the final graphic mode.
 fn init_graphic(resolution: Option<(usize, usize)>) -> GraphicInfo {
-    let handle = boot::get_handle_for_protocol::<GraphicsOutput>()
-        .expect("failed to get GraphicsOutput");
+    let handle =
+        boot::get_handle_for_protocol::<GraphicsOutput>().expect("failed to get GraphicsOutput");
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle)
         .expect("failed to open GraphicsOutput");
 
