@@ -1,12 +1,29 @@
 # rBoot
 
-[![Actions Status](https://github.com/rcore-os/rboot/workflows/CI/badge.svg)](https://github.com/rcore-os/rboot/actions)
+The x86_64 UEFI bootloader for rCore / zCore OS.
 
-The x86_64 UEFI bootloader for rCore OS.
+## Build
 
-## rustc info
+```sh
+cargo build --release --target x86_64-unknown-uefi
+```
 
-> This project won't use the newest nightly toolchain, see the [issue#452](https://github.com/rust-osdev/uefi-rs/issues/452) of [uefi](https://crates.io/crates/uefi) crate
+The output EFI binary is at `target/x86_64-unknown-uefi/release/rboot.efi`.
 
-- current rustc -- rustc 1.64.0-nightly (9a7b7d5e5 2022-07-19)
-- current rust-toolchain -- nightly-2022-07-20
+## Example
+
+See [`example-kernel/`](example-kernel/) for a minimal bare-metal kernel that boots via rboot and prints to serial.
+
+Run `example-kernel/test.sh` to build and test in QEMU.
+
+## Configuration
+
+Edit `rboot.conf` to configure the bootloader. See [`example-kernel/rboot.conf`](example-kernel/rboot.conf) for a working example. Available options:
+
+- `kernel_path` - path to the kernel ELF binary
+- `kernel_stack_address` - virtual address for the kernel stack
+- `kernel_stack_size` - kernel stack size in 4KiB pages
+- `physical_memory_offset` - virtual address offset for physical memory mapping
+- `resolution` - graphic output resolution (e.g. `1024x768`)
+- `initramfs` - path to the initial ramdisk image
+- `cmdline` - kernel command line

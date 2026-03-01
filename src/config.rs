@@ -1,6 +1,7 @@
 // TODO: use no_std serde crate to parse
 
 use core::str::FromStr;
+use log::warn;
 
 /// Config for the bootloader
 #[derive(Debug)]

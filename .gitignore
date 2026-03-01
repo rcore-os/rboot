@@ -15,3 +15,8 @@ Cargo.lock
 **/*./
 !.github/
 !.cargo/
+
+# QEMU ESP directory
+/esp/
+/example-kernel/esp/
+/example-kernel/target/
