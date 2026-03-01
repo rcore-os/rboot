@@ -8,19 +8,15 @@
 
 #![no_std]
 #![no_main]
-#![allow(warnings)]
-
-#[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate log;
 
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::ptr::NonNull;
 use rboot::{BootInfo, GraphicInfo};
-use uefi::boot::{self, AllocateType, MemoryDescriptor, MemoryType, ScopedProtocol};
-use uefi::mem::memory_map::{MemoryMap, MemoryMapOwned};
+use uefi::boot::{self, AllocateType, MemoryType};
+use uefi::mem::memory_map::MemoryMap;
 use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::media::file::*;
@@ -228,9 +224,11 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator {
 
 /// Jump to ELF entry according to global variable `ENTRY`
 unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
-    asm!("mov rsp, {}; call {}", in(reg) stacktop, in(reg) ENTRY, in("rdi") bootinfo);
-    loop {
-        asm!("nop");
+    unsafe {
+        asm!("mov rsp, {}; call {}", in(reg) stacktop, in(reg) ENTRY, in("rdi") bootinfo);
+        loop {
+            asm!("nop");
+        }
     }
 }
 

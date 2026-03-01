@@ -1,5 +1,4 @@
 #![no_std]
-#![allow(warnings)]
 
 extern crate alloc;
 
