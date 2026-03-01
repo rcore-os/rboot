@@ -11,4 +11,4 @@ description = "The x86_64 UEFI bootloader for rCore"
 uefi = { version = "0.36", features = ["alloc", "global_allocator", "logger", "panic_handler"] }
 log = "0.4"
 xmas-elf = "0.10"
-x86_64 = "0.15"
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }

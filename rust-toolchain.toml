@@ -1,5 +1,5 @@
 [toolchain]
 profile = "minimal"
-channel = "nightly-2026-02-28"
+channel = "stable"
 components = ["rust-src", "rustfmt"]
 targets = ["x86_64-unknown-uefi"]

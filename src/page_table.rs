@@ -1,5 +1,7 @@
 //! This file is modified from 'page_table.rs' in 'rust-osdev/bootloader'
 
+use log::{debug, info};
+
 use x86_64::structures::paging::{mapper::*, *};
 use x86_64::{PhysAddr, VirtAddr, align_up};
 use xmas_elf::{ElfFile, program};

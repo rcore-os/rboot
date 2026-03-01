@@ -8,12 +8,12 @@
 
 #![no_std]
 #![no_main]
+
 extern crate alloc;
-#[macro_use]
-extern crate log;
 
 use alloc::vec::Vec;
 use core::arch::asm;
+use log::info;
 use rboot::{BootInfo, GraphicInfo};
 use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::mem::memory_map::MemoryMap;
