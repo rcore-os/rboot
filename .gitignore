@@ -18,3 +18,5 @@ Cargo.lock
 
 # QEMU ESP directory
 /esp/
+/tests/esp/
+/tests/test-kernel/target/

@@ -1,6 +1,6 @@
 [package]
 name = "rboot"
-version = "0.1.6"
+version = "0.2.0"
 authors = ["Runji Wang <wangrunji0408@163.com>"]
 edition = "2024"
 description = "The x86_64 UEFI bootloader for rCore"
