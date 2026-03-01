@@ -115,19 +115,11 @@ fn efi_main() -> Status {
         Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
     }
 
-    info!("exit boot services");
-
-    let mmap = unsafe { boot::exit_boot_services(None) };
-    // NOTE: alloc & log can no longer be used
-
-    let mut memory_map = Vec::with_capacity(128);
-    for desc in mmap.entries() {
-        memory_map.push(*desc);
-    }
-
-    // construct BootInfo
-    let bootinfo = BootInfo {
-        memory_map,
+    // Pre-allocate BootInfo before exiting boot services, since alloc is
+    // unavailable afterwards.
+    let stacktop = config.kernel_stack_address + config.kernel_stack_size * 0x1000;
+    let mut bootinfo = BootInfo {
+        memory_map: Vec::with_capacity(128),
         physical_memory_offset: config.physical_memory_offset,
         graphic_info,
         acpi2_rsdp_addr: acpi2_addr as u64,
@@ -136,7 +128,15 @@ fn efi_main() -> Status {
         initramfs_size,
         cmdline: config.cmdline,
     };
-    let stacktop = config.kernel_stack_address + config.kernel_stack_size * 0x1000;
+
+    info!("exit boot services");
+
+    let mmap = unsafe { boot::exit_boot_services(None) };
+    // NOTE: alloc & log can no longer be used
+
+    for desc in mmap.entries() {
+        bootinfo.memory_map.push(*desc);
+    }
     unsafe {
         jump_to_entry(&bootinfo, stacktop);
     }
