@@ -8,7 +8,11 @@ description = "The x86_64 UEFI bootloader for rCore"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uefi = { version = "0.36", features = ["alloc", "global_allocator", "logger", "panic_handler"] }
+uefi = { version = "0.36", features = ["alloc"] }
 log = "0.4"
 xmas-elf = "0.10"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
+
+[features]
+default = ["uefi-boot"]
+uefi-boot = ["uefi/global_allocator", "uefi/logger", "uefi/panic_handler"]

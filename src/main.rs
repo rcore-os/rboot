@@ -34,6 +34,7 @@ const CONFIG_PATH: &str = "\\EFI\\Boot\\rboot.conf";
 
 #[entry]
 fn efi_main() -> Status {
+    uefi::helpers::init().expect("failed to init uefi helpers");
     info!("bootloader is running");
 
     let config = {
