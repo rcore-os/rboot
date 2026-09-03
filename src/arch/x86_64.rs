@@ -1,10 +1,29 @@
-//! This file is modified from 'page_table.rs' in 'rust-osdev/bootloader'
-
 use log::{debug, info};
-
+use rboot::BootInfo;
+use uefi::boot::{self, AllocateType, MemoryType};
+use x86_64::registers::control::*;
 use x86_64::structures::paging::{mapper::*, *};
 use x86_64::{PhysAddr, VirtAddr, align_up};
 use xmas_elf::{ElfFile, program};
+
+/// Get current page table from CR3
+pub fn current_page_table() -> OffsetPageTable<'static> {
+    let p4_table_addr = Cr3::read().0.start_address().as_u64();
+    let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
+    unsafe { OffsetPageTable::new(p4_table, VirtAddr::new(0)) }
+}
+
+/// Use `boot::allocate_pages()` as frame allocator
+pub struct UEFIFrameAllocator;
+
+unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame> {
+        let addr = boot::allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
+            .expect("failed to allocate frame");
+        let frame = PhysFrame::containing_address(PhysAddr::new(addr.as_ptr() as u64));
+        Some(frame)
+    }
+}
 
 pub fn map_elf(
     elf: &ElfFile,
@@ -26,7 +45,6 @@ pub fn map_stack(
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) -> Result<(), MapToError<Size4KiB>> {
     info!("mapping stack at {:#x}", addr);
-    // create a stack
     let stack_start = Page::containing_address(VirtAddr::new(addr));
     let stack_end = stack_start + pages;
 
@@ -86,14 +104,9 @@ fn map_segment(
     }
 
     if mem_size > file_size {
-        // .bss section (or similar), which needs to be zeroed
         let zero_start = virt_start_addr + file_size;
         let zero_end = virt_start_addr + mem_size;
         if zero_start.as_u64() & 0xfff != 0 {
-            // A part of the last mapped frame needs to be zeroed. This is
-            // not possible since it could already contains parts of the next
-            // segment. Thus, we need to copy it before zeroing.
-
             let new_frame = frame_allocator
                 .allocate_frame()
                 .ok_or(MapToError::FrameAllocationFailed)?;
@@ -105,11 +118,9 @@ fn map_segment(
             let temp_page_ptr = new_frame.start_address().as_u64() as *mut PageArray;
 
             unsafe {
-                // copy contents
                 temp_page_ptr.write(last_page_ptr.read());
             }
 
-            // remap last page
             if let Err(e) = page_table.unmap(last_page) {
                 return Err(match e {
                     UnmapError::ParentEntryHugePage => MapToError::ParentEntryHugePage,
@@ -124,7 +135,6 @@ fn map_segment(
             }
         }
 
-        // Map additional frames.
         let start_page: Page =
             Page::containing_address(VirtAddr::new(align_up(zero_start.as_u64(), Size4KiB::SIZE)));
         let end_page = Page::containing_address(zero_end);
@@ -139,7 +149,6 @@ fn map_segment(
             }
         }
 
-        // zero bss
         unsafe {
             core::ptr::write_bytes(
                 zero_start.as_mut_ptr::<u8>(),
@@ -151,8 +160,6 @@ fn map_segment(
     Ok(())
 }
 
-/// Map physical memory [0, max_addr)
-/// to virtual space [offset, offset + max_addr)
 pub fn map_physical_memory(
     offset: u64,
     max_addr: u64,
@@ -170,6 +177,20 @@ pub fn map_physical_memory(
                 .map_to(page, frame, flags, frame_allocator)
                 .expect("failed to map physical memory")
                 .flush();
+        }
+    }
+}
+
+pub unsafe fn jump_to_entry(entry: usize, bootinfo: *const BootInfo, stacktop: u64) -> ! {
+    unsafe {
+        core::arch::asm!(
+            "mov rsp, {stacktop}; call {entry}",
+            stacktop = in(reg) stacktop,
+            entry = in(reg) entry,
+            in("rdi") bootinfo,
+        );
+        loop {
+            core::arch::asm!("nop");
         }
     }
 }

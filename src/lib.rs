@@ -38,3 +38,19 @@ pub struct GraphicInfo {
     /// Framebuffer size
     pub fb_size: u64,
 }
+
+/// AArch64 Boot Info passed to zCore/rCore on AArch64
+#[repr(C)]
+#[derive(Debug)]
+pub struct Aarch64BootInfo {
+    /// Kernel command line
+    pub cmdline: &'static str,
+    /// Firmware type (e.g. "QEMU", "Raspi4")
+    pub firmware_type: &'static str,
+    /// UART base physical address
+    pub uart_base: usize,
+    /// GIC base physical address
+    pub gic_base: usize,
+    /// Physical to virtual mapping offset
+    pub offset: usize,
+}
