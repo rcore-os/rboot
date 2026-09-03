@@ -1,8 +1,12 @@
 use log::{debug, info};
 use rboot::BootInfo;
 use uefi::boot::{self, AllocateType, MemoryType};
+use x86_64::instructions::tables::{lgdt, sgdt};
 use x86_64::registers::control::*;
-use x86_64::structures::paging::{mapper::*, *};
+use x86_64::structures::{
+    DescriptorTablePointer,
+    paging::{mapper::*, *},
+};
 use x86_64::{PhysAddr, VirtAddr, align_up};
 use xmas_elf::{ElfFile, program};
 
@@ -23,6 +27,31 @@ unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator {
         let frame = PhysFrame::containing_address(PhysAddr::new(addr.as_ptr() as u64));
         Some(frame)
     }
+}
+
+/// Copy the firmware GDT into loader-owned memory and return a descriptor that
+/// addresses the copy through the kernel's physical-memory mapping.
+pub fn prepare_gdt(physical_memory_offset: u64) -> DescriptorTablePointer {
+    let firmware_gdt = sgdt();
+    let size = usize::from(firmware_gdt.limit) + 1;
+    let pages = size.div_ceil(Size4KiB::SIZE as usize);
+    let gdt_phys = boot::allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, pages)
+        .expect("failed to allocate GDT");
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(firmware_gdt.base.as_ptr::<u8>(), gdt_phys.as_ptr(), size);
+    }
+
+    DescriptorTablePointer {
+        limit: firmware_gdt.limit,
+        base: VirtAddr::new(gdt_phys.as_ptr() as u64 + physical_memory_offset),
+    }
+}
+
+/// Load the relocated GDT after exiting boot services, so its address remains
+/// valid when the kernel replaces the firmware page tables.
+pub unsafe fn load_gdt(gdt: &DescriptorTablePointer) {
+    unsafe { lgdt(gdt) };
 }
 
 pub fn map_elf(

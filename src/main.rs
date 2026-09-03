@@ -124,6 +124,7 @@ fn efi_main() -> Status {
             &mut page_table,
             &mut arch::UEFIFrameAllocator,
         );
+        let gdt = arch::prepare_gdt(config.physical_memory_offset);
         unsafe {
             Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
         }
@@ -146,6 +147,7 @@ fn efi_main() -> Status {
             bootinfo.memory_map.push(*desc);
         }
         unsafe {
+            arch::load_gdt(&gdt);
             arch::jump_to_entry(entry, &bootinfo, stacktop);
         }
     }
