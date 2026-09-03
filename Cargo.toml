@@ -8,7 +8,7 @@ description = "The UEFI bootloader for rCore"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uefi = { version = "0.36", features = ["alloc"] }
+uefi = { version = "0.40", features = ["alloc"] }
 log = "0.4"
 xmas-elf = "0.10"
 

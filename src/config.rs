@@ -54,15 +54,15 @@ pub const DEFAULT_CONFIG: Config = Config {
     firmware_type: "PC",
 };
 
-fn parse_num(value: &str) -> u64 {
+fn parse_num(value: &str) -> Option<u64> {
     let value = value.trim();
     if let Some(hex) = value
         .strip_prefix("0x")
         .or_else(|| value.strip_prefix("0X"))
     {
-        u64::from_str_radix(hex, 16).unwrap_or(0)
+        u64::from_str_radix(hex, 16).ok()
     } else {
-        u64::from_str(value).unwrap_or(0)
+        u64::from_str(value).ok()
     }
 }
 
@@ -93,24 +93,40 @@ impl<'a> Config<'a> {
 
     fn process(&mut self, key: &str, value: &'a str) {
         match key {
-            "kernel_stack_address" => self.kernel_stack_address = parse_num(value),
-            "kernel_stack_size" => self.kernel_stack_size = parse_num(value),
+            "kernel_stack_address" => match parse_num(value) {
+                Some(value) => self.kernel_stack_address = value,
+                None => warn!("invalid kernel_stack_address: {value}"),
+            },
+            "kernel_stack_size" => match parse_num(value) {
+                Some(value) => self.kernel_stack_size = value,
+                None => warn!("invalid kernel_stack_size: {value}"),
+            },
             "physical_memory_offset" => {
-                self.physical_memory_offset = parse_num(value);
+                if let Some(value) = parse_num(value) {
+                    self.physical_memory_offset = value;
+                } else {
+                    warn!("invalid physical_memory_offset: {value}");
+                }
             }
             "kernel_path" => self.kernel_path = value,
             "resolution" => {
                 let mut iter = value.split('x');
-                if let (Some(x), Some(y)) = (iter.next(), iter.next()) {
-                    if let (Ok(x), Ok(y)) = (x.parse::<usize>(), y.parse::<usize>()) {
-                        self.resolution = Some((x, y));
-                    }
+                if let (Some(x), Some(y)) = (iter.next(), iter.next())
+                    && let (Ok(x), Ok(y)) = (x.parse::<usize>(), y.parse::<usize>())
+                {
+                    self.resolution = Some((x, y));
                 }
             }
             "initramfs" => self.initramfs = Some(value),
             "cmdline" => self.cmdline = value,
-            "uart_base" => self.uart_base = parse_num(value) as usize,
-            "gic_base" => self.gic_base = parse_num(value) as usize,
+            "uart_base" => match parse_num(value) {
+                Some(value) => self.uart_base = value as usize,
+                None => warn!("invalid uart_base: {value}"),
+            },
+            "gic_base" => match parse_num(value) {
+                Some(value) => self.gic_base = value as usize,
+                None => warn!("invalid gic_base: {value}"),
+            },
             "firmware_type" => self.firmware_type = value,
             _ => warn!("undefined config key: {}", key),
         }
