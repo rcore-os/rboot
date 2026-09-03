@@ -3,7 +3,7 @@ name = "rboot"
 version = "0.2.0"
 authors = ["Runji Wang <wangrunji0408@163.com>"]
 edition = "2024"
-description = "The x86_64 UEFI bootloader for rCore"
+description = "The UEFI bootloader for rCore"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,6 +11,8 @@ description = "The x86_64 UEFI bootloader for rCore"
 uefi = { version = "0.36", features = ["alloc"] }
 log = "0.4"
 xmas-elf = "0.10"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 
 [features]

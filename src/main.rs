@@ -2,164 +2,196 @@
 //!
 //! 1. Load config from "\EFI\Boot\rboot.conf"
 //! 2. Load kernel ELF file
-//! 3. Map ELF segments to virtual memory
-//! 4. Map kernel stack and all physical memory
-//! 5. Exit boot and jump to ELF entry
+//! 3. Map ELF segments and physical memory
+//! 4. Exit boot and jump to ELF entry
 
 #![no_std]
 #![no_main]
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use core::arch::asm;
 use log::info;
-use rboot::{BootInfo, GraphicInfo};
 use uefi::boot::{self, AllocateType, MemoryType};
-use uefi::mem::memory_map::MemoryMap;
 use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::media::file::*;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::table::cfg::ConfigTableEntry;
-use x86_64::registers::control::*;
-use x86_64::structures::paging::*;
-use x86_64::{PhysAddr, VirtAddr};
 use xmas_elf::ElfFile;
 
+mod arch;
 mod config;
-mod page_table;
 
 const CONFIG_PATH: &str = "\\EFI\\Boot\\rboot.conf";
 
 #[entry]
 fn efi_main() -> Status {
     uefi::helpers::init().expect("failed to init uefi helpers");
-    info!("bootloader is running");
+    info!("rboot bootloader is running");
 
     let config = {
-        let mut file = open_file(CONFIG_PATH);
-        let buf = load_file(&mut file);
-        config::Config::parse(buf)
+        if let Some(mut file) = try_open_file(CONFIG_PATH) {
+            let buf = load_file(&mut file);
+            config::Config::parse(buf)
+        } else {
+            info!("config file not found, using default config");
+            config::Config::parse(b"")
+        }
     };
+    info!("config: {:#x?}", config);
 
     let graphic_info = init_graphic(config.resolution);
-    info!("config: {:#x?}", config);
 
     let acpi2_addr = system::with_config_table(|entries| {
         entries
             .iter()
             .find(|entry| entry.guid == ConfigTableEntry::ACPI2_GUID)
-            .expect("failed to find ACPI 2 RSDP")
-            .address
-    });
+            .map(|entry| entry.address)
+    })
+    .unwrap_or(core::ptr::null());
     info!("acpi2: {:?}", acpi2_addr);
 
     let smbios_addr = system::with_config_table(|entries| {
         entries
             .iter()
             .find(|entry| entry.guid == ConfigTableEntry::SMBIOS_GUID)
-            .expect("failed to find SMBIOS")
-            .address
-    });
+            .map(|entry| entry.address)
+    })
+    .unwrap_or(core::ptr::null());
     info!("smbios: {:?}", smbios_addr);
 
-    let elf = {
-        let mut file = open_file(config.kernel_path);
-        let buf = load_file(&mut file);
-        ElfFile::new(buf).expect("failed to parse ELF")
+    let elf_file_buf = {
+        let mut file = if let Some(file) = try_open_file(config.kernel_path) {
+            file
+        } else if let Some(file) = try_open_file("\\os") {
+            file
+        } else if let Some(file) = try_open_file("\\EFI\\Boot\\os") {
+            file
+        } else if let Some(file) = try_open_file("\\EFI\\zCore\\zcore.elf") {
+            file
+        } else {
+            panic!("failed to open kernel ELF file: {}", config.kernel_path);
+        };
+        load_file(&mut file)
     };
-    unsafe {
-        ENTRY = elf.header.pt2.entry_point() as usize;
-    }
+    let elf = ElfFile::new(elf_file_buf).expect("failed to parse kernel ELF");
 
     let (initramfs_addr, initramfs_size) = if let Some(path) = config.initramfs {
-        let mut file = open_file(path);
-        let buf = load_file(&mut file);
-        (buf.as_ptr() as u64, buf.len() as u64)
+        if let Some(mut file) = try_open_file(path) {
+            let buf = load_file(&mut file);
+            (buf.as_ptr() as u64, buf.len() as u64)
+        } else {
+            (0, 0)
+        }
     } else {
         (0, 0)
     };
 
-    let mmap = boot::memory_map(MemoryType::LOADER_DATA).expect("failed to get memory map");
-    let max_phys_addr = mmap
-        .entries()
-        .map(|m| m.phys_start + m.page_count * 0x1000)
-        .max()
-        .unwrap()
-        .max(0x1_0000_0000); // include IOAPIC MMIO area
+    #[cfg(target_arch = "x86_64")]
+    {
+        use alloc::vec::Vec;
+        use rboot::BootInfo;
+        use uefi::mem::memory_map::MemoryMap;
+        use x86_64::registers::control::*;
 
-    let mut page_table = current_page_table();
-    // root page table is readonly
-    // disable write protect
-    unsafe {
-        Cr0::update(|f| f.remove(Cr0Flags::WRITE_PROTECT));
-        Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
+        let entry = elf.header.pt2.entry_point() as usize;
+
+        let mmap = boot::memory_map(MemoryType::LOADER_DATA).expect("failed to get memory map");
+        let max_phys_addr = mmap
+            .entries()
+            .map(|m| m.phys_start + m.page_count * 0x1000)
+            .max()
+            .unwrap()
+            .max(0x1_0000_0000);
+
+        let mut page_table = arch::current_page_table();
+        unsafe {
+            Cr0::update(|f| f.remove(Cr0Flags::WRITE_PROTECT));
+            Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
+        }
+        arch::map_elf(&elf, &mut page_table, &mut arch::UEFIFrameAllocator)
+            .expect("failed to map ELF");
+        arch::map_stack(
+            config.kernel_stack_address,
+            config.kernel_stack_size,
+            &mut page_table,
+            &mut arch::UEFIFrameAllocator,
+        )
+        .expect("failed to map stack");
+        arch::map_physical_memory(
+            config.physical_memory_offset,
+            max_phys_addr,
+            &mut page_table,
+            &mut arch::UEFIFrameAllocator,
+        );
+        unsafe {
+            Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
+        }
+
+        let stacktop = config.kernel_stack_address + config.kernel_stack_size * 0x1000;
+        let mut bootinfo = BootInfo {
+            memory_map: Vec::with_capacity(128),
+            physical_memory_offset: config.physical_memory_offset,
+            graphic_info: graphic_info.expect("failed to init GOP"),
+            acpi2_rsdp_addr: acpi2_addr as u64,
+            smbios_addr: smbios_addr as u64,
+            initramfs_addr,
+            initramfs_size,
+            cmdline: config.cmdline,
+        };
+
+        info!("exit boot services");
+        let mmap = unsafe { boot::exit_boot_services(None) };
+        for desc in mmap.entries() {
+            bootinfo.memory_map.push(*desc);
+        }
+        unsafe {
+            arch::jump_to_entry(entry, &bootinfo, stacktop);
+        }
     }
-    page_table::map_elf(&elf, &mut page_table, &mut UEFIFrameAllocator).expect("failed to map ELF");
-    page_table::map_stack(
-        config.kernel_stack_address,
-        config.kernel_stack_size,
-        &mut page_table,
-        &mut UEFIFrameAllocator,
-    )
-    .expect("failed to map stack");
-    page_table::map_physical_memory(
-        config.physical_memory_offset,
-        max_phys_addr,
-        &mut page_table,
-        &mut UEFIFrameAllocator,
-    );
-    // recover write protect
-    unsafe {
-        Cr0::update(|f| f.insert(Cr0Flags::WRITE_PROTECT));
-    }
 
-    // Pre-allocate BootInfo before exiting boot services, since alloc is
-    // unavailable afterwards.
-    let stacktop = config.kernel_stack_address + config.kernel_stack_size * 0x1000;
-    let mut bootinfo = BootInfo {
-        memory_map: Vec::with_capacity(128),
-        physical_memory_offset: config.physical_memory_offset,
-        graphic_info,
-        acpi2_rsdp_addr: acpi2_addr as u64,
-        smbios_addr: smbios_addr as u64,
-        initramfs_addr,
-        initramfs_size,
-        cmdline: config.cmdline,
-    };
+    #[cfg(target_arch = "aarch64")]
+    {
+        let _ = (initramfs_addr, initramfs_size, graphic_info);
+        let entry = arch::load_elf(&elf, config.physical_memory_offset);
+        let pt0_paddr = arch::setup_page_tables();
 
-    info!("exit boot services");
+        let bootinfo = rboot::Aarch64BootInfo {
+            cmdline: config.cmdline,
+            firmware_type: config.firmware_type,
+            uart_base: config.uart_base,
+            gic_base: config.gic_base,
+            offset: config.physical_memory_offset as usize,
+        };
 
-    let mmap = unsafe { boot::exit_boot_services(None) };
-    // NOTE: alloc & log can no longer be used
+        let bootinfo_box = alloc::boxed::Box::new(bootinfo);
+        let bootinfo_ptr = alloc::boxed::Box::into_raw(bootinfo_box) as usize;
 
-    for desc in mmap.entries() {
-        bootinfo.memory_map.push(*desc);
-    }
-    unsafe {
-        jump_to_entry(&bootinfo, stacktop);
+        info!("kernel entry point: 0x{:x}", entry);
+        info!("exit boot services");
+        let _ = unsafe { boot::exit_boot_services(None) };
+
+        unsafe {
+            arch::jump_to_kernel(entry, bootinfo_ptr, pt0_paddr);
+        }
     }
 }
 
-/// Open file at `path`
-fn open_file(path: &str) -> RegularFile {
-    info!("opening file: {}", path);
-    let handle =
-        boot::get_handle_for_protocol::<SimpleFileSystem>().expect("failed to get FileSystem");
-    let mut fs = boot::open_protocol_exclusive::<SimpleFileSystem>(handle)
-        .expect("failed to open FileSystem");
+/// Try to open file at `path`
+fn try_open_file(path: &str) -> Option<RegularFile> {
+    info!("trying to open file: {}", path);
+    let handle = boot::get_handle_for_protocol::<SimpleFileSystem>().ok()?;
+    let mut fs = boot::open_protocol_exclusive::<SimpleFileSystem>(handle).ok()?;
     let mut buf = [0u16; 256];
-    let path =
-        uefi::CStr16::from_str_with_buf(path, &mut buf).expect("failed to convert path to ucs-2");
-    let mut root = fs.open_volume().expect("failed to open volume");
+    let ucs_path = uefi::CStr16::from_str_with_buf(path, &mut buf).ok()?;
+    let mut root = fs.open_volume().ok()?;
     let handle = root
-        .open(path, FileMode::Read, FileAttribute::empty())
-        .expect("failed to open file");
+        .open(ucs_path, FileMode::Read, FileAttribute::empty())
+        .ok()?;
 
-    match handle.into_type().expect("failed to into_type") {
-        FileType::Regular(regular) => regular,
-        _ => panic!("Invalid file type"),
+    match handle.into_type().ok()? {
+        FileType::Regular(regular) => Some(regular),
+        _ => None,
     }
 }
 
@@ -180,58 +212,19 @@ fn load_file(file: &mut RegularFile) -> &'static mut [u8] {
 
 /// If `resolution` is some, then set graphic mode matching the resolution.
 /// Return information of the final graphic mode.
-fn init_graphic(resolution: Option<(usize, usize)>) -> GraphicInfo {
-    let handle =
-        boot::get_handle_for_protocol::<GraphicsOutput>().expect("failed to get GraphicsOutput");
-    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle)
-        .expect("failed to open GraphicsOutput");
+fn init_graphic(resolution: Option<(usize, usize)>) -> Option<rboot::GraphicInfo> {
+    let handle = boot::get_handle_for_protocol::<GraphicsOutput>().ok()?;
+    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle).ok()?;
 
     if let Some(resolution) = resolution {
-        let mode = gop
-            .modes()
-            .find(|mode| {
-                let info = mode.info();
-                info.resolution() == resolution
-            })
-            .expect("graphic mode not found");
-        info!("switching graphic mode");
-        gop.set_mode(&mode).expect("Failed to set graphics mode");
+        if let Some(mode) = gop.modes().find(|m| m.info().resolution() == resolution) {
+            info!("switching graphic mode");
+            let _ = gop.set_mode(&mode);
+        }
     }
-    GraphicInfo {
+    Some(rboot::GraphicInfo {
         mode: gop.current_mode_info(),
         fb_addr: gop.frame_buffer().as_mut_ptr() as u64,
         fb_size: gop.frame_buffer().size() as u64,
-    }
+    })
 }
-
-/// Get current page table from CR3
-fn current_page_table() -> OffsetPageTable<'static> {
-    let p4_table_addr = Cr3::read().0.start_address().as_u64();
-    let p4_table = unsafe { &mut *(p4_table_addr as *mut PageTable) };
-    unsafe { OffsetPageTable::new(p4_table, VirtAddr::new(0)) }
-}
-
-/// Use `boot::allocate_pages()` as frame allocator
-struct UEFIFrameAllocator;
-
-unsafe impl FrameAllocator<Size4KiB> for UEFIFrameAllocator {
-    fn allocate_frame(&mut self) -> Option<PhysFrame> {
-        let addr = boot::allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
-            .expect("failed to allocate frame");
-        let frame = PhysFrame::containing_address(PhysAddr::new(addr.as_ptr() as u64));
-        Some(frame)
-    }
-}
-
-/// Jump to ELF entry according to global variable `ENTRY`
-unsafe fn jump_to_entry(bootinfo: *const BootInfo, stacktop: u64) -> ! {
-    unsafe {
-        asm!("mov rsp, {}; call {}", in(reg) stacktop, in(reg) ENTRY, in("rdi") bootinfo);
-        loop {
-            asm!("nop");
-        }
-    }
-}
-
-/// The entry point of kernel, set by BSP.
-static mut ENTRY: usize = 0;
