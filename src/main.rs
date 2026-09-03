@@ -154,7 +154,9 @@ fn efi_main() -> Status {
     {
         let _ = (initramfs_addr, initramfs_size, graphic_info);
         let entry = arch::load_elf(&elf, config.physical_memory_offset);
-        let pt0_paddr = arch::setup_page_tables();
+        let memory_map = boot::memory_map(MemoryType::LOADER_DATA)
+            .expect("failed to get memory map for page-table setup");
+        let pt0_paddr = arch::setup_page_tables(&memory_map);
 
         let bootinfo = rboot::Aarch64BootInfo {
             cmdline: config.cmdline,
@@ -216,11 +218,11 @@ fn init_graphic(resolution: Option<(usize, usize)>) -> Option<rboot::GraphicInfo
     let handle = boot::get_handle_for_protocol::<GraphicsOutput>().ok()?;
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle).ok()?;
 
-    if let Some(resolution) = resolution {
-        if let Some(mode) = gop.modes().find(|m| m.info().resolution() == resolution) {
-            info!("switching graphic mode");
-            let _ = gop.set_mode(&mode);
-        }
+    if let Some(resolution) = resolution
+        && let Some(mode) = gop.modes().find(|m| m.info().resolution() == resolution)
+    {
+        info!("switching graphic mode");
+        let _ = gop.set_mode(&mode);
     }
     Some(rboot::GraphicInfo {
         mode: gop.current_mode_info(),

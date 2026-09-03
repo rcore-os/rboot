@@ -19,4 +19,5 @@ Cargo.lock
 # QEMU ESP directory
 /esp/
 /example-kernel/esp/
+/example-kernel/esp-aarch64/
 /example-kernel/target/

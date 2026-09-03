@@ -5,6 +5,9 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-uefi, aarch64-unknown-uefi]
     steps:
       - uses: actions/checkout@v4
 
@@ -14,11 +17,14 @@ jobs:
       - name: Check code format
         run: cargo fmt --check
 
+      - name: Clippy
+        run: cargo clippy --target ${{ matrix.target }}
+
       - name: Build
-        run: cargo build --release --target x86_64-unknown-uefi
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Doc
-        run: cargo doc --target x86_64-unknown-uefi
+        run: cargo doc --target ${{ matrix.target }}
 
   test:
     runs-on: ubuntu-latest
@@ -33,3 +39,17 @@ jobs:
 
       - name: Run end-to-end test
         run: ./example-kernel/test.sh
+
+  test-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Install QEMU and UEFI firmware
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-efi-aarch64
+
+      - name: Run aarch64 end-to-end test
+        run: ./example-kernel/test-aarch64.sh
